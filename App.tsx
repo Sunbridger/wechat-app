@@ -1,15 +1,15 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar, { TabType } from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
 import Moments from './components/Moments';
 import NewFriends from './components/NewFriends';
 import StickerManager from './components/StickerManager';
+import GroupCreator from './components/GroupCreator';
 import { Contact, Message, MessageType, User, Moment, Sticker } from './types';
 import { getGeminiReply, transcribeAudio } from './services/geminiService';
 
 // Mock Data
-const CURRENT_USER: User = {
+const DEFAULT_USER: User = {
   id: 'me',
   name: '我',
   avatar: 'https://picsum.photos/id/64/200/200'
@@ -106,6 +106,11 @@ const INITIAL_STICKERS: Sticker[] = [
 
 const App: React.FC = () => {
   // Load from localStorage or use initials
+  const [currentUser, setCurrentUser] = useState<User>(() => {
+      const saved = localStorage.getItem('wechat_user');
+      return saved ? JSON.parse(saved) : DEFAULT_USER;
+  });
+
   const [contacts, setContacts] = useState<Contact[]>(() => {
     const saved = localStorage.getItem('wechat_contacts');
     return saved ? JSON.parse(saved) : INITIAL_CONTACTS;
@@ -131,6 +136,10 @@ const App: React.FC = () => {
 
   // Persistence Effects
   useEffect(() => {
+    localStorage.setItem('wechat_user', JSON.stringify(currentUser));
+  }, [currentUser]);
+
+  useEffect(() => {
     localStorage.setItem('wechat_contacts', JSON.stringify(contacts));
   }, [contacts]);
 
@@ -151,7 +160,7 @@ const App: React.FC = () => {
 
   const handleSelectContact = (id: string) => {
     setActiveContactId(id);
-    if (id !== 'new_friends') {
+    if (id !== 'new_friends' && id !== 'group_create') {
         setCurrentTab('chat'); // Auto switch to chat view when selecting a regular contact
     }
   };
@@ -169,6 +178,48 @@ const App: React.FC = () => {
           c.id === contactId ? { ...c, hasAiActive: !c.hasAiActive } : c
       ));
   }, []);
+
+  const handleStartGroupChat = useCallback(() => {
+      setActiveContactId('group_create');
+  }, []);
+
+  const handleCreateGroup = useCallback((name: string, selectedContactIds: string[]) => {
+      const newGroupId = `group_${Date.now()}`;
+      
+      // Find selected contact objects to add as members
+      const selectedContacts = contacts.filter(c => selectedContactIds.includes(c.id));
+      const members: User[] = [
+          currentUser,
+          ...selectedContacts.map(c => ({ id: c.id, name: c.name, avatar: c.avatar }))
+      ];
+
+      const newGroup: Contact = {
+          id: newGroupId,
+          name: name,
+          avatar: 'https://picsum.photos/id/10/200/200', // Generic group avatar or generate one
+          lastMessage: '你创建了群聊',
+          lastMessageTime: Date.now(),
+          isAi: false,
+          isGroup: true,
+          members: members,
+          hasAiActive: false
+      };
+
+      setContacts(prev => [...prev, newGroup]);
+      setMessagesMap(prev => ({
+          ...prev,
+          [newGroupId]: [{
+              id: Date.now().toString(),
+              content: `你邀请 ${selectedContacts.map(c => c.name).join('、')} 加入了群聊`,
+              senderId: 'system',
+              timestamp: Date.now(),
+              type: MessageType.SYSTEM
+          }]
+      }));
+
+      setActiveContactId(newGroupId);
+      setCurrentTab('chat');
+  }, [contacts, currentUser]);
 
   const handleAddContact = useCallback((name: string, id?: string) => {
       const newId = id || `user_${Date.now()}`;
@@ -228,7 +279,7 @@ const App: React.FC = () => {
       // 2. Add System Message
       const sysMsg: Message = {
           id: Date.now().toString(),
-          content: `"${CURRENT_USER.name}" 邀请 "${name}" 加入了群聊`,
+          content: `"${currentUser.name}" 邀请 "${name}" 加入了群聊`,
           senderId: 'system',
           timestamp: Date.now(),
           type: MessageType.SYSTEM
@@ -238,12 +289,23 @@ const App: React.FC = () => {
           ...prev,
           [contactId]: [...(prev[contactId] || []), sysMsg]
       }));
+  }, [currentUser]);
+
+  const handleUpdateUserAvatar = useCallback((newAvatar: string) => {
+      setCurrentUser(prev => ({ ...prev, avatar: newAvatar }));
+      // In a real app, we would also update 'me' in all group members lists
+  }, []);
+
+  const handleUpdateContactAvatar = useCallback((contactId: string, newAvatar: string) => {
+      setContacts(prev => prev.map(c => 
+          c.id === contactId ? { ...c, avatar: newAvatar } : c
+      ));
   }, []);
 
   const handleAddMoment = useCallback((content: string, images: string[], video?: string) => {
     const newMoment: Moment = {
         id: `m_${Date.now()}`,
-        author: CURRENT_USER,
+        author: currentUser,
         content,
         images,
         video,
@@ -252,23 +314,23 @@ const App: React.FC = () => {
         comments: []
     };
     setMoments(prev => [newMoment, ...prev]);
-  }, []);
+  }, [currentUser]);
 
   const handleLikeMoment = useCallback((momentId: string) => {
       setMoments(prev => prev.map(m => {
           if (m.id === momentId) {
-              const isLiked = m.likes.includes(CURRENT_USER.name);
+              const isLiked = m.likes.includes(currentUser.name);
               let newLikes;
               if (isLiked) {
-                  newLikes = m.likes.filter(name => name !== CURRENT_USER.name);
+                  newLikes = m.likes.filter(name => name !== currentUser.name);
               } else {
-                  newLikes = [...m.likes, CURRENT_USER.name];
+                  newLikes = [...m.likes, currentUser.name];
               }
               return { ...m, likes: newLikes };
           }
           return m;
       }));
-  }, []);
+  }, [currentUser]);
 
   const handleAddComment = useCallback((momentId: string, content: string) => {
     setMoments(prev => prev.map(m => {
@@ -277,14 +339,14 @@ const App: React.FC = () => {
                 ...m,
                 comments: [...m.comments, {
                     id: `c_${Date.now()}`,
-                    authorName: CURRENT_USER.name,
+                    authorName: currentUser.name,
                     content
                 }]
             };
         }
         return m;
     }));
-  }, []);
+  }, [currentUser]);
 
   // Sticker Handlers
   const handleAddSticker = useCallback((base64: string) => {
@@ -314,7 +376,7 @@ const App: React.FC = () => {
       type: MessageType = MessageType.TEXT, 
       extra: { duration?: number, fileName?: string, fileSize?: string } = {}
   ) => {
-    if (!activeContactId || activeContactId === 'new_friends') return;
+    if (!activeContactId || activeContactId === 'new_friends' || activeContactId === 'group_create') return;
 
     const newMessageId = Date.now().toString();
 
@@ -486,7 +548,7 @@ const App: React.FC = () => {
                </button>
             </div>
             <Moments 
-              currentUser={CURRENT_USER} 
+              currentUser={currentUser} 
               moments={moments}
               onAddMoment={handleAddMoment}
               onAddComment={handleAddComment}
@@ -505,6 +567,18 @@ const App: React.FC = () => {
       );
   } else if (activeContactId === 'new_friends') {
       mainContent = <NewFriends onAddContact={handleAddContact} />;
+  } else if (activeContactId === 'group_create') {
+      mainContent = (
+          <GroupCreator 
+              contacts={contacts}
+              currentUser={currentUser}
+              onCreateGroup={handleCreateGroup}
+              onCancel={() => {
+                  setActiveContactId('');
+                  setCurrentTab('chat');
+              }}
+          />
+      );
   } else if (activeContact) {
       mainContent = (
         <div className="flex flex-col w-full h-full relative">
@@ -520,11 +594,12 @@ const App: React.FC = () => {
           <ChatWindow 
             activeContact={activeContact}
             messages={currentMessages}
-            currentUserAvatar={CURRENT_USER.avatar}
+            currentUserAvatar={currentUser.avatar}
             onSendMessage={handleSendMessage}
             onDeleteMessage={handleDeleteMessage}
             onToggleGroupAi={toggleGroupAi}
             onAddMember={handleAddMember}
+            onUpdateContactAvatar={handleUpdateContactAvatar}
             isTyping={isTyping}
             stickers={customStickers}
           />
@@ -554,7 +629,10 @@ const App: React.FC = () => {
             currentTab={currentTab}
             onTabChange={handleTabChange}
             onAddContact={(name) => handleAddContact(name)} 
+            onStartGroupChat={handleStartGroupChat}
             hasNewMoments={hasNewMoments}
+            currentUser={currentUser}
+            onUpdateUserAvatar={handleUpdateUserAvatar}
           />
         </div>
 

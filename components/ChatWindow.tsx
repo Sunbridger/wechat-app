@@ -1,6 +1,5 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreHorizontal, Smile, Paperclip, FolderOpen, Trash2, Mic, Wifi, Loader2, FileText, Plus, Heart } from 'lucide-react';
+import { MoreHorizontal, Smile, Paperclip, FolderOpen, Trash2, Mic, Wifi, Loader2, FileText, Plus, Heart, Image as ImageIcon } from 'lucide-react';
 import { Contact, Message, MessageType, Sticker } from '../types';
 
 interface ChatWindowProps {
@@ -11,6 +10,7 @@ interface ChatWindowProps {
   onDeleteMessage: (messageId: string) => void;
   onToggleGroupAi?: (contactId: string) => void;
   onAddMember?: (contactId: string, name: string) => void;
+  onUpdateContactAvatar?: (contactId: string, url: string) => void;
   isTyping: boolean;
   stickers: Sticker[];
 }
@@ -33,6 +33,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onDeleteMessage,
   onToggleGroupAi,
   onAddMember,
+  onUpdateContactAvatar,
   isTyping,
   stickers
 }) => {
@@ -50,6 +51,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const audioChunksRef = useRef<Blob[]>([]);
   const startTimeRef = useRef<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const groupAvatarInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -229,6 +231,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       }
   };
 
+  const handleGroupAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file && onUpdateContactAvatar) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+              if (ev.target?.result) {
+                  onUpdateContactAvatar(activeContact.id, ev.target.result as string);
+              }
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#f5f5f5] w-full relative">
       {/* Header */}
@@ -266,12 +281,28 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     {/* Settings Options */}
                     <div className="py-2">
                         {activeContact.isGroup && (
-                            <div className="px-4 py-2 text-sm text-gray-700 flex items-center justify-between hover:bg-gray-50 cursor-pointer" onClick={() => onToggleGroupAi && onToggleGroupAi(activeContact.id)}>
-                                <span>AI 助手</span>
-                                <div className={`w-9 h-5 rounded-full relative transition-colors ${activeContact.hasAiActive ? 'bg-[#07c160]' : 'bg-gray-300'}`}>
-                                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform transform ${activeContact.hasAiActive ? 'left-[18px]' : 'left-0.5'}`}></div>
+                            <>
+                                <div className="px-4 py-2 text-sm text-gray-700 flex items-center justify-between hover:bg-gray-50 cursor-pointer" onClick={() => onToggleGroupAi && onToggleGroupAi(activeContact.id)}>
+                                    <span>AI 助手</span>
+                                    <div className={`w-9 h-5 rounded-full relative transition-colors ${activeContact.hasAiActive ? 'bg-[#07c160]' : 'bg-gray-300'}`}>
+                                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform transform ${activeContact.hasAiActive ? 'left-[18px]' : 'left-0.5'}`}></div>
+                                    </div>
                                 </div>
-                            </div>
+                                <div 
+                                    className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer flex items-center justify-between"
+                                    onClick={() => groupAvatarInputRef.current?.click()}
+                                >
+                                    <span>修改群头像</span>
+                                    <ImageIcon size={14} className="text-gray-400"/>
+                                </div>
+                                <input 
+                                    type="file" 
+                                    ref={groupAvatarInputRef} 
+                                    className="hidden"
+                                    accept="image/*" 
+                                    onChange={handleGroupAvatarChange}
+                                />
+                            </>
                         )}
                         <div className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
                             <span>查找聊天记录</span>
