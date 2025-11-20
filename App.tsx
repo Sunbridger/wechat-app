@@ -115,7 +115,7 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('wechat_contacts');
     return saved ? JSON.parse(saved) : INITIAL_CONTACTS;
   });
-  
+
   const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>(() => {
     const saved = localStorage.getItem('wechat_messages');
     return saved ? JSON.parse(saved) : INITIAL_MESSAGES;
@@ -130,7 +130,7 @@ const App: React.FC = () => {
   const [activeContactId, setActiveContactId] = useState<string>('1');
   const [typingMap, setTypingMap] = useState<Record<string, boolean>>({});
   const [currentTab, setCurrentTab] = useState<TabType>('chat');
-  
+
   // Initialize with a red dot for demo purposes
   const [hasNewMoments, setHasNewMoments] = useState(true);
 
@@ -153,7 +153,7 @@ const App: React.FC = () => {
 
   // Sort contacts by last message time
   useEffect(() => {
-    setContacts(prev => 
+    setContacts(prev =>
       [...prev].sort((a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0))
     );
   }, [messagesMap]);
@@ -174,7 +174,7 @@ const App: React.FC = () => {
   };
 
   const toggleGroupAi = useCallback((contactId: string) => {
-      setContacts(prev => prev.map(c => 
+      setContacts(prev => prev.map(c =>
           c.id === contactId ? { ...c, hasAiActive: !c.hasAiActive } : c
       ));
   }, []);
@@ -185,7 +185,7 @@ const App: React.FC = () => {
 
   const handleCreateGroup = useCallback((name: string, selectedContactIds: string[]) => {
       const newGroupId = `group_${Date.now()}`;
-      
+
       // Find selected contact objects to add as members
       const selectedContacts = contacts.filter(c => selectedContactIds.includes(c.id));
       const members: User[] = [
@@ -240,7 +240,7 @@ const App: React.FC = () => {
       };
 
       setContacts(prev => [...prev, newContact]);
-      
+
       // Initialize chat with a system message
       setMessagesMap(prev => ({
           ...prev,
@@ -297,7 +297,7 @@ const App: React.FC = () => {
   }, []);
 
   const handleUpdateContactAvatar = useCallback((contactId: string, newAvatar: string) => {
-      setContacts(prev => prev.map(c => 
+      setContacts(prev => prev.map(c =>
           c.id === contactId ? { ...c, avatar: newAvatar } : c
       ));
   }, []);
@@ -382,8 +382,8 @@ const App: React.FC = () => {
   }, []);
 
   const handleSendMessage = useCallback(async (
-      content: string, 
-      type: MessageType = MessageType.TEXT, 
+      content: string,
+      type: MessageType = MessageType.TEXT,
       extra: { duration?: number, fileName?: string, fileSize?: string } = {}
   ) => {
     if (!activeContactId || activeContactId === 'new_friends' || activeContactId === 'group_create') return;
@@ -441,7 +441,7 @@ const App: React.FC = () => {
         const currentMessages = prev[activeContactId] || [];
         return {
           ...prev,
-          [activeContactId]: currentMessages.map(msg => 
+          [activeContactId]: currentMessages.map(msg =>
             msg.id === newMessageId ? { ...msg, status: 'sent' } : msg
           )
         };
@@ -464,7 +464,7 @@ const App: React.FC = () => {
         // Mark the user's message as READ when AI replies
         setMessagesMap(prev => {
             const currentMessages = prev[activeContactId] || [];
-            const updatedMessages = currentMessages.map(msg => 
+            const updatedMessages = currentMessages.map(msg =>
                 msg.id === newMessageId ? { ...msg, status: 'read' as const } : msg
             );
 
@@ -510,7 +510,7 @@ const App: React.FC = () => {
     // Get current messages from state
     const currentMessages = messagesMap[activeContactId] || [];
     const updatedMessages = currentMessages.filter(msg => msg.id !== messageId);
-    
+
     // Update messages map
     setMessagesMap(prev => ({
       ...prev,
@@ -528,7 +528,7 @@ const App: React.FC = () => {
              else if (lastMsg.type === MessageType.FILE) preview = '[文件]';
              else preview = lastMsg.content;
         }
-        
+
         return {
           ...c,
           lastMessage: preview,
@@ -550,15 +550,15 @@ const App: React.FC = () => {
       mainContent = (
         <div className="flex flex-col w-full h-full relative">
              <div className="md:hidden absolute top-4 left-4 z-50">
-               <button 
+               <button
                  onClick={() => handleTabChange('chat')}
                  className="bg-gray-200 p-2 rounded-full text-gray-600"
                >
                  ← 返回
                </button>
             </div>
-            <Moments 
-              currentUser={currentUser} 
+            <Moments
+              currentUser={currentUser}
               moments={moments}
               onAddMoment={handleAddMoment}
               onAddComment={handleAddComment}
@@ -568,7 +568,7 @@ const App: React.FC = () => {
       );
   } else if (currentTab === 'stickers') {
       mainContent = (
-          <StickerManager 
+          <StickerManager
             stickers={customStickers}
             onAddSticker={handleAddSticker}
             onDeleteSticker={handleDeleteSticker}
@@ -579,7 +579,7 @@ const App: React.FC = () => {
       mainContent = <NewFriends onAddContact={handleAddContact} />;
   } else if (activeContactId === 'group_create') {
       mainContent = (
-          <GroupCreator 
+          <GroupCreator
               contacts={contacts}
               currentUser={currentUser}
               onCreateGroup={handleCreateGroup}
@@ -594,14 +594,14 @@ const App: React.FC = () => {
         <div className="flex flex-col w-full h-full relative">
           {/* Mobile Back Button Overlay */}
           <div className="md:hidden absolute top-4 left-4 z-50">
-             <button 
+             <button
                onClick={() => setActiveContactId('')}
                className="bg-gray-200 p-2 rounded-full text-gray-600"
              >
                ← 返回
              </button>
           </div>
-          <ChatWindow 
+          <ChatWindow
             activeContact={activeContact}
             messages={currentMessages}
             currentUserAvatar={currentUser.avatar}
@@ -630,16 +630,16 @@ const App: React.FC = () => {
   return (
     <div className="flex items-center justify-center h-screen w-screen bg-[#e5e5e5]">
       {/* Main App Container centered on screen like desktop app */}
-      <div className="flex w-full h-full md:w-[1000px] md:h-[800px] md:rounded-lg overflow-hidden shadow-2xl bg-[#f5f5f5]">
+      <div className="flex w-full h-full md:w-[1000px] md:rounded-lg overflow-hidden shadow-2xl bg-[#f5f5f5]">
         {/* Left Sidebar */}
         <div className={`${(activeContactId || currentTab === 'moments' || currentTab === 'stickers') ? 'hidden md:flex' : 'flex'} w-full md:w-auto h-full`}>
-          <Sidebar 
-            contacts={contacts} 
-            activeContactId={activeContactId} 
+          <Sidebar
+            contacts={contacts}
+            activeContactId={activeContactId}
             onSelectContact={handleSelectContact}
             currentTab={currentTab}
             onTabChange={handleTabChange}
-            onAddContact={(name) => handleAddContact(name)} 
+            onAddContact={(name) => handleAddContact(name)}
             onStartGroupChat={handleStartGroupChat}
             hasNewMoments={hasNewMoments}
             currentUser={currentUser}
