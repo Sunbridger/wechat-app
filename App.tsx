@@ -371,6 +371,16 @@ const App: React.FC = () => {
       });
   }, []);
 
+  const handleDeleteChat = useCallback((contactId: string) => {
+      setContacts(prev => prev.filter(c => c.id !== contactId));
+      setMessagesMap(prev => {
+          const newMap = { ...prev };
+          delete newMap[contactId];
+          return newMap;
+      });
+      setActiveContactId('');
+  }, []);
+
   const handleSendMessage = useCallback(async (
       content: string, 
       type: MessageType = MessageType.TEXT, 
@@ -600,6 +610,7 @@ const App: React.FC = () => {
             onToggleGroupAi={toggleGroupAi}
             onAddMember={handleAddMember}
             onUpdateContactAvatar={handleUpdateContactAvatar}
+            onDeleteChat={handleDeleteChat}
             isTyping={isTyping}
             stickers={customStickers}
           />
