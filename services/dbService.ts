@@ -4,7 +4,7 @@ const DB_NAME = 'WeChatCloneDB';
 const DB_VERSION = 1;
 
 // Store names
-const STORE_SYSTEM = 'system'; // For currentUser, peerId
+const STORE_SYSTEM = 'system'; // For currentUser, peerId, deviceId
 const STORE_CONTACTS = 'contacts';
 const STORE_MESSAGES = 'messages'; // key: contactId, value: Message[]
 const STORE_MOMENTS = 'moments';
@@ -110,6 +110,17 @@ export const dbService = {
 
   // --- Specific Data Handlers ---
 
+  // Device ID for Fingerprinting
+  async getOrCreateDeviceId(): Promise<string> {
+      const storedId = await this.get<string>(STORE_SYSTEM, 'deviceId');
+      if (storedId) return storedId;
+
+      // Generate a random UUID-like string
+      const newId = crypto.randomUUID ? crypto.randomUUID() : `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await this.put(STORE_SYSTEM, newId, 'deviceId');
+      return newId;
+  },
+
   // User
   async getUser(): Promise<User | undefined> {
     return this.get<User>(STORE_SYSTEM, 'currentUser');
@@ -193,7 +204,6 @@ export const dbService = {
                 if (processed === entries.length) resolve();
             }
         });
-        // Note: This doesn't handle deletion of entire conversation history keys if they are removed from the map in App.tsx (though handleDeleteChat handles that logic separately via logic below).
       });
   },
   

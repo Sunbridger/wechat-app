@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar, { TabType } from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
@@ -11,8 +10,8 @@ import { getGeminiReply, transcribeAudio } from './services/geminiService';
 import { p2pService, P2PMessagePayload } from './services/p2pService';
 import { dbService } from './services/dbService';
 
-// Mock Data (Used as initial defaults if DB is empty)
-const DEFAULT_USER: User = {
+// Fallback default only used if logic fails
+const FALLBACK_USER: User = {
   id: 'me',
   name: '我',
   avatar: 'https://picsum.photos/id/64/200/200'
@@ -90,7 +89,7 @@ const INITIAL_STICKERS: Sticker[] = [
 
 const App: React.FC = () => {
   // State - Initialized with defaults, updated via DB load
-  const [currentUser, setCurrentUser] = useState<User>(DEFAULT_USER);
+  const [currentUser, setCurrentUser] = useState<User>(FALLBACK_USER);
   const [contacts, setContacts] = useState<Contact[]>(INITIAL_CONTACTS);
   const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>(INITIAL_MESSAGES);
   const [moments, setMoments] = useState<Moment[]>(INITIAL_MOMENTS);
@@ -109,9 +108,21 @@ const App: React.FC = () => {
       try {
         await dbService.init();
         
-        const user = await dbService.getUser();
-        if (user) setCurrentUser(user);
-        else await dbService.saveUser(DEFAULT_USER);
+        // Device Fingerprint Logic
+        const deviceId = await dbService.getOrCreateDeviceId();
+        
+        let user = await dbService.getUser();
+        if (!user) {
+            // No user exists (first run in this browser context), create unique one based on deviceId
+            const uniqueUser: User = {
+                id: `user_${deviceId}`,
+                name: `User_${deviceId.substring(0, 4)}`, // Simple unique name
+                avatar: `https://picsum.photos/seed/${deviceId}/200` // Deterministic unique avatar
+            };
+            await dbService.saveUser(uniqueUser);
+            user = uniqueUser;
+        }
+        setCurrentUser(user);
 
         const savedPeerId = await dbService.getPeerId();
         
@@ -189,8 +200,11 @@ const App: React.FC = () => {
       setContacts(prev => {
           const existing = prev.find(c => c.peerId === senderInfo.id || c.name === senderInfo.name); 
           if (existing) {
+              // FIX: Update name and avatar from senderInfo to ensure consistency
               return prev.map(c => c.id === existing.id ? {
                   ...c, 
+                  name: senderInfo.name, 
+                  avatar: senderInfo.avatar,
                   lastMessage: message.type === MessageType.TEXT ? message.content : `[${message.type}]`,
                   lastMessageTime: Date.now()
               } : c);
@@ -451,9 +465,6 @@ const App: React.FC = () => {
       });
       setActiveContactId('');
       
-      // Also explicitly remove from DB for thoroughness, although saving the state would overwrite it.
-      // Since we overwrite contacts list, that part is fine. 
-      // For messages, we must explicitly delete the key because we use bulk put or specific put.
       if (isDbLoaded) {
           dbService.deleteMessagesForContact(contactId);
       }
@@ -667,7 +678,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex items-center justify-center h-screen w-screen bg-[#e5e5e5]">
-      <div className="flex w-full h-full md:w-[1000px] md:h-[800px] md:rounded-lg overflow-hidden shadow-2xl bg-[#f5f5f5]">
+      <div className="flex w-full h-full md:w-[1000px] md:rounded-lg overflow-hidden shadow-2xl bg-[#f5f5f5]">
         <div className={`${(activeContactId || currentTab === 'moments' || currentTab === 'stickers') ? 'hidden md:flex' : 'flex'} w-full md:w-auto h-full`}>
           <Sidebar contacts={contacts} activeContactId={activeContactId} onSelectContact={handleSelectContact} currentTab={currentTab} onTabChange={handleTabChange} onAddContact={(name) => handleAddContact(name)} onStartGroupChat={handleStartGroupChat} hasNewMoments={hasNewMoments} currentUser={currentUser} onUpdateUserAvatar={handleUpdateUserAvatar} myPeerId={myPeerId} />
         </div>
