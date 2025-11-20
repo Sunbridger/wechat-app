@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar, { TabType } from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
-import { Contact, Message, MessageType, User } from './types';
+import Moments from './components/Moments';
+import { Contact, Message, MessageType, User, Moment } from './types';
 import { getGeminiReply, transcribeAudio } from './services/geminiService';
 
 // Mock Data
@@ -71,6 +72,29 @@ const INITIAL_MESSAGES: Record<string, Message[]> = {
   '3': []
 };
 
+const INITIAL_MOMENTS: Moment[] = [
+  {
+      id: 'm1',
+      author: { id: '3', name: '创意写作', avatar: 'https://picsum.photos/id/91/200/200' },
+      content: '今天在公园看到了一只非常可爱的小狗，忍不住拍了几张照片。生活中的小确幸无处不在！🐶🌳',
+      images: ['https://picsum.photos/id/237/400/400', 'https://picsum.photos/id/238/400/400', 'https://picsum.photos/id/239/400/400'],
+      timestamp: Date.now() - 1800000, // 30 mins ago
+      likes: ['Gemini AI 助手', '小李'],
+      comments: [
+          { id: 'c1', authorName: 'Gemini AI 助手', content: '真的很可爱！' }
+      ]
+  },
+  {
+      id: 'm2',
+      author: { id: '2', name: '小李', avatar: 'https://picsum.photos/seed/user_88/200' },
+      content: '加班到深夜，看到城市的霓虹，突然觉得一切努力都是值得的。加油，打工人！💪🌃',
+      images: ['https://picsum.photos/id/122/500/300'],
+      timestamp: Date.now() - 7200000, // 2 hours ago
+      likes: ['我'],
+      comments: []
+  }
+];
+
 const App: React.FC = () => {
   // Load from localStorage or use initials
   const [contacts, setContacts] = useState<Contact[]>(() => {
@@ -83,9 +107,13 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : INITIAL_MESSAGES;
   });
 
+  const [moments, setMoments] = useState<Moment[]>(INITIAL_MOMENTS);
   const [activeContactId, setActiveContactId] = useState<string>('1');
   const [typingMap, setTypingMap] = useState<Record<string, boolean>>({});
   const [currentTab, setCurrentTab] = useState<TabType>('chat');
+  
+  // Initialize with a red dot for demo purposes
+  const [hasNewMoments, setHasNewMoments] = useState(true);
 
   // Persistence Effects
   useEffect(() => {
@@ -106,6 +134,14 @@ const App: React.FC = () => {
   const handleSelectContact = (id: string) => {
     setActiveContactId(id);
     setCurrentTab('chat'); // Auto switch to chat view when selecting a contact
+  };
+
+  const handleTabChange = (tab: TabType) => {
+      setCurrentTab(tab);
+      // Clear red dot when viewing moments
+      if (tab === 'moments') {
+          setHasNewMoments(false);
+      }
   };
 
   const toggleGroupAi = useCallback((contactId: string) => {
@@ -175,6 +211,51 @@ const App: React.FC = () => {
           ...prev,
           [contactId]: [...(prev[contactId] || []), sysMsg]
       }));
+  }, []);
+
+  const handleAddMoment = useCallback((content: string, images: string[]) => {
+    const newMoment: Moment = {
+        id: `m_${Date.now()}`,
+        author: CURRENT_USER,
+        content,
+        images,
+        timestamp: Date.now(),
+        likes: [],
+        comments: []
+    };
+    setMoments(prev => [newMoment, ...prev]);
+  }, []);
+
+  const handleLikeMoment = useCallback((momentId: string) => {
+      setMoments(prev => prev.map(m => {
+          if (m.id === momentId) {
+              const isLiked = m.likes.includes(CURRENT_USER.name);
+              let newLikes;
+              if (isLiked) {
+                  newLikes = m.likes.filter(name => name !== CURRENT_USER.name);
+              } else {
+                  newLikes = [...m.likes, CURRENT_USER.name];
+              }
+              return { ...m, likes: newLikes };
+          }
+          return m;
+      }));
+  }, []);
+
+  const handleAddComment = useCallback((momentId: string, content: string) => {
+    setMoments(prev => prev.map(m => {
+        if (m.id === momentId) {
+            return {
+                ...m,
+                comments: [...m.comments, {
+                    id: `c_${Date.now()}`,
+                    authorName: CURRENT_USER.name,
+                    content
+                }]
+            };
+        }
+        return m;
+    }));
   }, []);
 
   const handleSendMessage = useCallback(async (
@@ -344,20 +425,43 @@ const App: React.FC = () => {
       {/* Main App Container centered on screen like desktop app */}
       <div className="flex w-full h-full md:w-[1000px] md:h-[800px] md:rounded-lg overflow-hidden shadow-2xl bg-[#f5f5f5]">
         {/* Left Sidebar */}
-        <div className={`${activeContactId ? 'hidden md:flex' : 'flex'} w-full md:w-auto h-full`}>
+        <div className={`${(activeContactId || currentTab === 'moments') ? 'hidden md:flex' : 'flex'} w-full md:w-auto h-full`}>
           <Sidebar 
             contacts={contacts} 
             activeContactId={activeContactId} 
             onSelectContact={handleSelectContact}
             currentTab={currentTab}
-            onTabChange={setCurrentTab}
+            onTabChange={handleTabChange}
             onAddContact={handleAddContact}
+            hasNewMoments={hasNewMoments}
           />
         </div>
 
-        {/* Right Chat Area */}
-        <div className={`${!activeContactId ? 'hidden md:flex' : 'flex'} flex-1 h-full`}>
-          {activeContact ? (
+        {/* Right Content Area */}
+        <div className={`${(!activeContactId && currentTab !== 'moments') ? 'hidden md:flex' : 'flex'} flex-1 h-full`}>
+          
+          {/* Condition 1: Moments Tab is Active */}
+          {currentTab === 'moments' ? (
+              <div className="flex flex-col w-full h-full relative">
+                   <div className="md:hidden absolute top-4 left-4 z-50">
+                     <button 
+                       onClick={() => handleTabChange('chat')}
+                       className="bg-gray-200 p-2 rounded-full text-gray-600"
+                     >
+                       ← 返回
+                     </button>
+                  </div>
+                  <Moments 
+                    currentUser={CURRENT_USER} 
+                    moments={moments}
+                    onAddMoment={handleAddMoment}
+                    onAddComment={handleAddComment}
+                    onLikeMoment={handleLikeMoment}
+                  />
+              </div>
+          ) : 
+          /* Condition 2: Chat is Active */
+          activeContact ? (
             <div className="flex flex-col w-full h-full relative">
               {/* Mobile Back Button Overlay */}
               <div className="md:hidden absolute top-4 left-4 z-50">
@@ -380,6 +484,7 @@ const App: React.FC = () => {
               />
             </div>
           ) : (
+            /* Condition 3: Empty State */
             <div className="flex items-center justify-center w-full h-full text-gray-400 bg-[#f5f5f5]">
               <div className="text-center">
                 <img src="https://picsum.photos/id/2/100/100" className="w-20 h-20 mx-auto mb-4 opacity-20 grayscale rounded-full" alt="Logo"/>

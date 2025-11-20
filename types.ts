@@ -39,3 +39,19 @@ export interface User {
   name: string;
   avatar: string;
 }
+
+export interface Comment {
+  id: string;
+  authorName: string;
+  content: string;
+}
+
+export interface Moment {
+  id: string;
+  author: User;
+  content: string;
+  images: string[];
+  timestamp: number;
+  likes: string[]; // array of names
+  comments: Comment[];
+}
