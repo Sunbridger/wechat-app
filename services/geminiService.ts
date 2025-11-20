@@ -46,46 +46,66 @@ export const getGeminiReply = async (
         }
     };
 
-    // Map history to Gemini format
-    const chatHistory = historyMessages.map(msg => {
-      const role = msg.senderId === 'me' ? 'user' : 'model';
-      const part = formatContentPart(msg);
-      
-      // For group chats, we prefix user text messages with their name to give context
-      if (isGroup && role === 'user' && 'text' in part && msg.senderName) {
-         return {
-             role,
-             parts: [{ text: `${msg.senderName}: ${part.text}` }]
-         };
-      }
+    // Construct history ensuring correct roles and turn-taking
+    const formattedHistory: { role: string, parts: any[] }[] = [];
 
-      return {
-        role,
-        parts: [part],
-      };
-    });
+    for (const msg of historyMessages) {
+        let role = 'user';
+        
+        if (isGroup) {
+            // In group chat:
+            // - 'gemini_ai' is the model
+            // - 'me' is a user
+            // - other IDs are also users (other humans)
+            if (msg.senderId === 'gemini_ai') {
+                role = 'model';
+            } else {
+                role = 'user';
+            }
+        } else {
+            // In private chat:
+            // - 'me' is user
+            // - the contact (senderId) is the model
+            role = msg.senderId === 'me' ? 'user' : 'model';
+        }
+
+        let part = formatContentPart(msg);
+
+        // If it's a group user message (not me), prefix the name for context
+        if (isGroup && role === 'user' && 'text' in part && msg.senderId !== 'me') {
+            const name = msg.senderName || 'Group Member';
+            part = { text: `${name}: ${(part as any).text}` };
+        }
+
+        // Merge consecutive turns of the same role to satisfy API requirements
+        if (formattedHistory.length > 0 && formattedHistory[formattedHistory.length - 1].role === role) {
+            formattedHistory[formattedHistory.length - 1].parts.push(part);
+        } else {
+            formattedHistory.push({ role, parts: [part] });
+        }
+    }
 
     const chat: Chat = ai.chats.create({
       model: 'gemini-2.5-flash',
-      history: chatHistory,
+      history: formattedHistory,
       config: {
         systemInstruction: isGroup 
-            ? `${SYSTEM_INSTRUCTION} 你现在在一个名为 "${contactName}" 的群聊中。你需要根据上下文回复群友的消息。` 
+            ? `${SYSTEM_INSTRUCTION} 你现在在一个名为 "${contactName}" 的群聊中。群成员的消息会带有名字前缀。你需要根据上下文积极参与群聊互动。` 
             : `${SYSTEM_INSTRUCTION} 你现在正在模仿 ${contactName}。`,
       },
     });
 
     // Prepare the new message part
-    const newMessagePart = formatContentPart(lastMessage);
+    let newMessagePart = formatContentPart(lastMessage);
     
-    // Add sender name context for the last message if it's a group
-    let finalMessagePayload = newMessagePart;
-    if (isGroup && lastMessage.senderId !== 'me' && 'text' in newMessagePart && lastMessage.senderName) {
-        finalMessagePayload = { text: `${lastMessage.senderName}: ${(newMessagePart as any).text}` };
+    // Add sender name context for the last message if it's a group and not me
+    if (isGroup && lastMessage.senderId !== 'me' && 'text' in newMessagePart) {
+        const name = lastMessage.senderName || 'Group Member';
+        newMessagePart = { text: `${name}: ${(newMessagePart as any).text}` };
     }
     
     const response: GenerateContentResponse = await chat.sendMessage({
-      message: [finalMessagePayload], // Chat.sendMessage expects array of parts or string
+      message: [newMessagePart], 
     });
 
     return response.text || "抱歉，我没想好怎么回。";

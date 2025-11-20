@@ -519,7 +519,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         {/* Footer / Send Button */}
         <div className="h-12 flex justify-end items-center px-4 pb-2">
           <div className="text-xs text-gray-400 mr-4 hidden sm:block">
-            {inputMode === 'text' && "按下 Enter 发送内容"}
+            {inputMode === 'text' && "松开 Enter 发送"}
           </div>
           {inputMode === 'text' && (
             <button 
