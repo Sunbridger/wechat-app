@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Heart, MessageSquare, MoreHorizontal, X, Image as ImageIcon, Send, Plus } from 'lucide-react';
+import { Camera, Heart, MessageSquare, MoreHorizontal, X, Image as ImageIcon, Send, Plus, Video } from 'lucide-react';
 import { Moment, User } from '../types';
 
 interface MomentsProps {
   currentUser: User;
   moments: Moment[];
-  onAddMoment: (content: string, images: string[]) => void;
+  onAddMoment: (content: string, images: string[], video?: string) => void;
   onAddComment: (momentId: string, content: string) => void;
   onLikeMoment: (momentId: string) => void;
 }
@@ -19,6 +19,7 @@ const Moments: React.FC<MomentsProps> = ({ currentUser, moments, onAddMoment, on
   const [isPublishing, setIsPublishing] = useState(false);
   const [newPostContent, setNewPostContent] = useState('');
   const [newPostImages, setNewPostImages] = useState<string[]>([]);
+  const [newPostVideo, setNewPostVideo] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Close menus when clicking outside
@@ -73,22 +74,32 @@ const Moments: React.FC<MomentsProps> = ({ currentUser, moments, onAddMoment, on
   // Publishing Logic
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {
+          const file = e.target.files[0];
           const reader = new FileReader();
           reader.onload = (ev) => {
               if (ev.target?.result) {
-                  setNewPostImages(prev => [...prev, ev.target!.result as string]);
+                  const result = ev.target.result as string;
+                  if (file.type.startsWith('video/')) {
+                      setNewPostVideo(result);
+                      setNewPostImages([]); // Clear images if video is selected
+                  } else {
+                      setNewPostImages(prev => [...prev, result]);
+                      setNewPostVideo(null); // Clear video if image is selected
+                  }
               }
           };
-          reader.readAsDataURL(e.target.files[0]);
+          reader.readAsDataURL(file);
       }
+      if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handlePublish = () => {
-      if (!newPostContent.trim() && newPostImages.length === 0) return;
-      onAddMoment(newPostContent, newPostImages);
+      if (!newPostContent.trim() && newPostImages.length === 0 && !newPostVideo) return;
+      onAddMoment(newPostContent, newPostImages, newPostVideo || undefined);
       setIsPublishing(false);
       setNewPostContent('');
       setNewPostImages([]);
+      setNewPostVideo(null);
   };
 
   return (
@@ -151,6 +162,17 @@ const Moments: React.FC<MomentsProps> = ({ currentUser, moments, onAddMoment, on
                         <div className="text-[15px] text-[#191919] mb-2.5 whitespace-pre-wrap leading-relaxed">
                             {moment.content}
                         </div>
+
+                        {/* Video Player */}
+                        {moment.video && (
+                             <div className="mb-3 max-w-[300px]">
+                                <video 
+                                    src={moment.video} 
+                                    controls 
+                                    className="w-full max-h-[400px] bg-black rounded-md"
+                                />
+                            </div>
+                        )}
 
                         {/* Image Grid */}
                         {moment.images.length > 0 && (
@@ -261,8 +283,8 @@ const Moments: React.FC<MomentsProps> = ({ currentUser, moments, onAddMoment, on
                   <button onClick={() => setIsPublishing(false)} className="text-black text-[15px]">取消</button>
                   <button 
                     onClick={handlePublish}
-                    disabled={!newPostContent.trim() && newPostImages.length === 0}
-                    className={`px-4 py-1.5 rounded-[4px] text-[14px] text-white ${(!newPostContent.trim() && newPostImages.length === 0) ? 'bg-gray-300' : 'bg-[#07c160]'}`}
+                    disabled={!newPostContent.trim() && newPostImages.length === 0 && !newPostVideo}
+                    className={`px-4 py-1.5 rounded-[4px] text-[14px] text-white ${(!newPostContent.trim() && newPostImages.length === 0 && !newPostVideo) ? 'bg-gray-300' : 'bg-[#07c160]'}`}
                   >
                       发表
                   </button>
@@ -275,6 +297,7 @@ const Moments: React.FC<MomentsProps> = ({ currentUser, moments, onAddMoment, on
                     onChange={(e) => setNewPostContent(e.target.value)}
                   />
                   <div className="grid grid-cols-3 gap-2 mt-4">
+                      {/* Display Images */}
                       {newPostImages.map((img, idx) => (
                           <div key={idx} className="aspect-square relative group">
                               <img src={img} alt="Upload" className="w-full h-full object-cover rounded-sm" />
@@ -286,7 +309,22 @@ const Moments: React.FC<MomentsProps> = ({ currentUser, moments, onAddMoment, on
                               </button>
                           </div>
                       ))}
-                      {newPostImages.length < 9 && (
+
+                       {/* Display Video */}
+                       {newPostVideo && (
+                           <div className="aspect-square relative group col-span-2">
+                               <video src={newPostVideo} className="w-full h-full object-cover rounded-sm bg-black" />
+                               <button 
+                                onClick={() => setNewPostVideo(null)}
+                                className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-0.5 group-hover:opacity-100 transition-opacity"
+                              >
+                                  <X size={12} />
+                              </button>
+                           </div>
+                       )}
+
+                      {/* Add Button */}
+                      {(newPostImages.length < 9 && !newPostVideo) && (
                           <button 
                             onClick={() => fileInputRef.current?.click()}
                             className="aspect-square bg-[#f7f7f7] flex items-center justify-center rounded-sm hover:bg-[#efefef] transition-colors"
@@ -295,11 +333,12 @@ const Moments: React.FC<MomentsProps> = ({ currentUser, moments, onAddMoment, on
                           </button>
                       )}
                   </div>
+                  <div className="mt-2 text-xs text-gray-400">支持上传图片或视频</div>
                   <input 
                     type="file" 
                     ref={fileInputRef} 
                     className="hidden" 
-                    accept="image/*"
+                    accept="image/*,video/*"
                     onChange={handleFileSelect}
                   />
               </div>

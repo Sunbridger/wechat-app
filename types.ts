@@ -51,6 +51,7 @@ export interface Moment {
   author: User;
   content: string;
   images: string[];
+  video?: string; // Base64 data URI for video
   timestamp: number;
   likes: string[]; // array of names
   comments: Comment[];

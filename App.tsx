@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar, { TabType } from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
 import Moments from './components/Moments';
+import NewFriends from './components/NewFriends';
 import { Contact, Message, MessageType, User, Moment } from './types';
 import { getGeminiReply, transcribeAudio } from './services/geminiService';
 
@@ -133,7 +134,9 @@ const App: React.FC = () => {
 
   const handleSelectContact = (id: string) => {
     setActiveContactId(id);
-    setCurrentTab('chat'); // Auto switch to chat view when selecting a contact
+    if (id !== 'new_friends') {
+        setCurrentTab('chat'); // Auto switch to chat view when selecting a regular contact
+    }
   };
 
   const handleTabChange = (tab: TabType) => {
@@ -150,8 +153,15 @@ const App: React.FC = () => {
       ));
   }, []);
 
-  const handleAddContact = useCallback((name: string) => {
-      const newId = `user_${Date.now()}`;
+  const handleAddContact = useCallback((name: string, id?: string) => {
+      const newId = id || `user_${Date.now()}`;
+      // Check if already exists
+      if (contacts.some(c => c.id === newId)) {
+          setActiveContactId(newId);
+          setCurrentTab('chat');
+          return;
+      }
+
       const newContact: Contact = {
           id: newId,
           name: name,
@@ -177,7 +187,7 @@ const App: React.FC = () => {
 
       setActiveContactId(newId);
       setCurrentTab('chat');
-  }, []);
+  }, [contacts]);
 
   const handleAddMember = useCallback((contactId: string, name: string) => {
       // 1. Update Contact Members
@@ -213,12 +223,13 @@ const App: React.FC = () => {
       }));
   }, []);
 
-  const handleAddMoment = useCallback((content: string, images: string[]) => {
+  const handleAddMoment = useCallback((content: string, images: string[], video?: string) => {
     const newMoment: Moment = {
         id: `m_${Date.now()}`,
         author: CURRENT_USER,
         content,
         images,
+        video,
         timestamp: Date.now(),
         likes: [],
         comments: []
@@ -263,7 +274,7 @@ const App: React.FC = () => {
       type: MessageType = MessageType.TEXT, 
       extra: { duration?: number, fileName?: string, fileSize?: string } = {}
   ) => {
-    if (!activeContactId) return;
+    if (!activeContactId || activeContactId === 'new_friends') return;
 
     const newMessageId = Date.now().toString();
 
@@ -420,6 +431,66 @@ const App: React.FC = () => {
   const currentMessages = activeContactId ? (messagesMap[activeContactId] || []) : [];
   const isTyping = activeContactId ? (typingMap[activeContactId] || false) : false;
 
+  // Determine what to render in the main area
+  let mainContent;
+
+  if (currentTab === 'moments') {
+      mainContent = (
+        <div className="flex flex-col w-full h-full relative">
+             <div className="md:hidden absolute top-4 left-4 z-50">
+               <button 
+                 onClick={() => handleTabChange('chat')}
+                 className="bg-gray-200 p-2 rounded-full text-gray-600"
+               >
+                 ← 返回
+               </button>
+            </div>
+            <Moments 
+              currentUser={CURRENT_USER} 
+              moments={moments}
+              onAddMoment={handleAddMoment}
+              onAddComment={handleAddComment}
+              onLikeMoment={handleLikeMoment}
+            />
+        </div>
+      );
+  } else if (activeContactId === 'new_friends') {
+      mainContent = <NewFriends onAddContact={handleAddContact} />;
+  } else if (activeContact) {
+      mainContent = (
+        <div className="flex flex-col w-full h-full relative">
+          {/* Mobile Back Button Overlay */}
+          <div className="md:hidden absolute top-4 left-4 z-50">
+             <button 
+               onClick={() => setActiveContactId('')}
+               className="bg-gray-200 p-2 rounded-full text-gray-600"
+             >
+               ← 返回
+             </button>
+          </div>
+          <ChatWindow 
+            activeContact={activeContact}
+            messages={currentMessages}
+            currentUserAvatar={CURRENT_USER.avatar}
+            onSendMessage={handleSendMessage}
+            onDeleteMessage={handleDeleteMessage}
+            onToggleGroupAi={toggleGroupAi}
+            onAddMember={handleAddMember}
+            isTyping={isTyping}
+          />
+        </div>
+      );
+  } else {
+      mainContent = (
+        <div className="flex items-center justify-center w-full h-full text-gray-400 bg-[#f5f5f5]">
+          <div className="text-center">
+            <img src="https://picsum.photos/id/2/100/100" className="w-20 h-20 mx-auto mb-4 opacity-20 grayscale rounded-full" alt="Logo"/>
+            <p>选择一个聊天开始发送消息</p>
+          </div>
+        </div>
+      );
+  }
+
   return (
     <div className="flex items-center justify-center h-screen w-screen bg-[#e5e5e5]">
       {/* Main App Container centered on screen like desktop app */}
@@ -432,66 +503,14 @@ const App: React.FC = () => {
             onSelectContact={handleSelectContact}
             currentTab={currentTab}
             onTabChange={handleTabChange}
-            onAddContact={handleAddContact}
+            onAddContact={(name) => handleAddContact(name)} 
             hasNewMoments={hasNewMoments}
           />
         </div>
 
         {/* Right Content Area */}
         <div className={`${(!activeContactId && currentTab !== 'moments') ? 'hidden md:flex' : 'flex'} flex-1 h-full`}>
-          
-          {/* Condition 1: Moments Tab is Active */}
-          {currentTab === 'moments' ? (
-              <div className="flex flex-col w-full h-full relative">
-                   <div className="md:hidden absolute top-4 left-4 z-50">
-                     <button 
-                       onClick={() => handleTabChange('chat')}
-                       className="bg-gray-200 p-2 rounded-full text-gray-600"
-                     >
-                       ← 返回
-                     </button>
-                  </div>
-                  <Moments 
-                    currentUser={CURRENT_USER} 
-                    moments={moments}
-                    onAddMoment={handleAddMoment}
-                    onAddComment={handleAddComment}
-                    onLikeMoment={handleLikeMoment}
-                  />
-              </div>
-          ) : 
-          /* Condition 2: Chat is Active */
-          activeContact ? (
-            <div className="flex flex-col w-full h-full relative">
-              {/* Mobile Back Button Overlay */}
-              <div className="md:hidden absolute top-4 left-4 z-50">
-                 <button 
-                   onClick={() => setActiveContactId('')}
-                   className="bg-gray-200 p-2 rounded-full text-gray-600"
-                 >
-                   ← 返回
-                 </button>
-              </div>
-              <ChatWindow 
-                activeContact={activeContact}
-                messages={currentMessages}
-                currentUserAvatar={CURRENT_USER.avatar}
-                onSendMessage={handleSendMessage}
-                onDeleteMessage={handleDeleteMessage}
-                onToggleGroupAi={toggleGroupAi}
-                onAddMember={handleAddMember}
-                isTyping={isTyping}
-              />
-            </div>
-          ) : (
-            /* Condition 3: Empty State */
-            <div className="flex items-center justify-center w-full h-full text-gray-400 bg-[#f5f5f5]">
-              <div className="text-center">
-                <img src="https://picsum.photos/id/2/100/100" className="w-20 h-20 mx-auto mb-4 opacity-20 grayscale rounded-full" alt="Logo"/>
-                <p>选择一个聊天开始发送消息</p>
-              </div>
-            </div>
-          )}
+          {mainContent}
         </div>
       </div>
     </div>

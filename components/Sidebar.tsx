@@ -10,7 +10,7 @@ interface SidebarProps {
   onSelectContact: (id: string) => void;
   currentTab: TabType;
   onTabChange: (tab: TabType) => void;
-  onAddContact?: (name: string) => void;
+  onAddContact?: (name: string) => void; // Kept for compatibility, but sidebar logic updated
   hasNewMoments?: boolean;
 }
 
@@ -20,7 +20,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   onSelectContact,
   currentTab,
   onTabChange,
-  onAddContact,
   hasNewMoments
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -38,12 +37,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  const handleAddClick = () => {
-    const name = prompt("请输入好友名称：");
-    if (name && name.trim() && onAddContact) {
-        onAddContact(name.trim());
-    }
-    setMenuOpen(false);
+  const handleNewFriendsClick = () => {
+    onSelectContact('new_friends');
   };
 
   // Filter logic based on tab
@@ -86,8 +81,8 @@ const Sidebar: React.FC<SidebarProps> = ({
             {/* Function Keys */}
             <div className="mt-2 mb-2">
                 <div 
-                    onClick={handleAddClick}
-                    className="flex items-center px-3 py-2.5 cursor-pointer hover:bg-[#dcdcdc]"
+                    onClick={handleNewFriendsClick}
+                    className={`flex items-center px-3 py-2.5 cursor-pointer transition-colors ${activeContactId === 'new_friends' ? 'bg-[#c6c6c6]' : 'hover:bg-[#dcdcdc]'}`}
                 >
                     <div className="w-9 h-9 rounded-md bg-[#fa9d3b] flex items-center justify-center text-white">
                         <UserPlus size={20} fill="white" />
@@ -120,7 +115,9 @@ const Sidebar: React.FC<SidebarProps> = ({
             <div 
               key={contact.id}
               onClick={() => onSelectContact(contact.id)} // Switch to chat when clicking contact
-              className="flex items-center px-3 py-2.5 cursor-pointer hover:bg-[#dcdcdc] border-b border-[#e7e7e7]"
+              className={`flex items-center px-3 py-2.5 cursor-pointer border-b border-[#e7e7e7] transition-colors ${
+                activeContactId === contact.id ? 'bg-[#c6c6c6]' : 'hover:bg-[#dcdcdc]'
+              }`}
             >
               <img 
                 src={contact.avatar} 
@@ -236,7 +233,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           {/* Header Dropdown */}
           {menuOpen && (
             <div className="absolute top-14 right-2 w-32 bg-[#2e2e2e] rounded-md shadow-lg py-1 z-50 animate-fade-in-up">
-                <button onClick={handleAddClick} className="w-full text-left px-4 py-2 text-white hover:bg-[#3e3e3e] text-sm flex items-center gap-2">
+                <button onClick={handleNewFriendsClick} className="w-full text-left px-4 py-2 text-white hover:bg-[#3e3e3e] text-sm flex items-center gap-2">
                     <UserPlus size={16} />
                     <span>添加朋友</span>
                 </button>
