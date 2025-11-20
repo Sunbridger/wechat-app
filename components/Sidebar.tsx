@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, Users, Folder, Search, Plus, UserPlus, Users as UsersIcon, Tag, Aperture } from 'lucide-react';
 import { Contact } from '../types';
 
@@ -23,6 +23,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   hasNewMoments
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   
   const formatTime = (timestamp?: number) => {
     if (!timestamp) return '';
@@ -37,8 +39,29 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        menuOpen &&
+        menuRef.current &&
+        !menuRef.current.contains(event.target as Node) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(event.target as Node)
+      ) {
+        setMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [menuOpen]);
+
   const handleNewFriendsClick = () => {
     onSelectContact('new_friends');
+    setMenuOpen(false);
   };
 
   // Filter logic based on tab
@@ -224,15 +247,16 @@ const Sidebar: React.FC<SidebarProps> = ({
             />
           </div>
           <button 
+            ref={buttonRef}
             onClick={() => setMenuOpen(!menuOpen)}
-            className="bg-[#e2e2e2] p-1.5 rounded-[4px] text-gray-600 hover:bg-[#d1d1d1]"
+            className={`p-1.5 rounded-[4px] hover:bg-[#d1d1d1] ${menuOpen ? 'bg-[#d1d1d1] text-black' : 'bg-[#e2e2e2] text-gray-600'}`}
           >
             <Plus size={14} />
           </button>
 
           {/* Header Dropdown */}
           {menuOpen && (
-            <div className="absolute top-14 right-2 w-32 bg-[#2e2e2e] rounded-md shadow-lg py-1 z-50 animate-fade-in-up">
+            <div ref={menuRef} className="absolute top-14 right-2 w-32 bg-[#2e2e2e] rounded-md shadow-lg py-1 z-50 animate-fade-in-up">
                 <button onClick={handleNewFriendsClick} className="w-full text-left px-4 py-2 text-white hover:bg-[#3e3e3e] text-sm flex items-center gap-2">
                     <UserPlus size={16} />
                     <span>添加朋友</span>
