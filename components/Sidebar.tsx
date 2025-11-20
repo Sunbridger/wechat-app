@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Users, Folder, Search, Plus, UserPlus, Users as UsersIcon, Tag, Aperture, Smile, Upload } from 'lucide-react';
+import { MessageCircle, Users, Folder, Search, Plus, UserPlus, Users as UsersIcon, Tag, Aperture, Smile, Upload, Copy } from 'lucide-react';
 import { Contact, User } from '../types';
 
 export type TabType = 'chat' | 'contacts' | 'moments' | 'files' | 'stickers';
@@ -15,6 +15,7 @@ interface SidebarProps {
   hasNewMoments?: boolean;
   currentUser?: User;
   onUpdateUserAvatar?: (url: string) => void;
+  myPeerId?: string; // New prop
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -26,7 +27,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   onStartGroupChat,
   hasNewMoments,
   currentUser,
-  onUpdateUserAvatar
+  onUpdateUserAvatar,
+  myPeerId
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,12 +49,10 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  // Clear search when tab changes
   useEffect(() => {
     setSearchTerm('');
   }, [currentTab]);
 
-  // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -96,7 +96,13 @@ const Sidebar: React.FC<SidebarProps> = ({
       }
   };
 
-  // Filter logic based on tab and search term
+  const copyPeerId = () => {
+      if (myPeerId) {
+          navigator.clipboard.writeText(myPeerId);
+          alert("微信号 (ID) 已复制");
+      }
+  };
+
   const renderContent = () => {
     const term = searchTerm.toLowerCase();
 
@@ -144,7 +150,6 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       return (
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {/* Function Keys (Only show if not searching or searching empty) */}
             {!searchTerm && (
                 <div className="mt-2 mb-2">
                     <div 
@@ -177,12 +182,11 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
             )}
 
-            {/* Contact List */}
             {!searchTerm && <div className="px-4 py-1 text-xs text-gray-400 bg-[#f7f7f7]">常用联系人</div>}
              {sortedContacts.map((contact) => (
             <div 
               key={contact.id}
-              onClick={() => onSelectContact(contact.id)} // Switch to chat when clicking contact
+              onClick={() => onSelectContact(contact.id)} 
               className={`flex items-center px-3 py-2.5 cursor-pointer border-b border-[#e7e7e7] transition-colors ${
                 activeContactId === contact.id ? 'bg-[#c6c6c6]' : 'hover:bg-[#dcdcdc]'
               }`}
@@ -230,7 +234,6 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
         );
     } else {
-        // Files Tab
         return (
             <div className="flex-1 overflow-y-auto custom-scrollbar p-4 text-center">
                 <div className="mt-10 opacity-50">
@@ -266,55 +269,20 @@ const Sidebar: React.FC<SidebarProps> = ({
         />
 
         <div className="flex flex-col gap-6">
-          <button 
-            onClick={() => onTabChange('chat')}
-            className={`transition-colors ${currentTab === 'chat' ? 'text-[#07c160]' : 'hover:text-white'}`}
-            title="聊天"
-          >
-            <MessageCircle size={24} strokeWidth={1.5} fill={currentTab === 'chat' ? '#07c160' : 'none'} className={currentTab === 'chat' ? 'text-transparent' : ''} />
-          </button>
-          <button 
-            onClick={() => onTabChange('contacts')}
-            className={`transition-colors ${currentTab === 'contacts' ? 'text-[#07c160]' : 'hover:text-white'}`}
-            title="通讯录"
-          >
-            <Users size={24} strokeWidth={1.5} fill={currentTab === 'contacts' ? '#07c160' : 'none'} className={currentTab === 'contacts' ? 'text-transparent' : ''} />
-          </button>
-          
+          <button onClick={() => onTabChange('chat')} className={`transition-colors ${currentTab === 'chat' ? 'text-[#07c160]' : 'hover:text-white'}`} title="聊天"><MessageCircle size={24} strokeWidth={1.5} fill={currentTab === 'chat' ? '#07c160' : 'none'} className={currentTab === 'chat' ? 'text-transparent' : ''} /></button>
+          <button onClick={() => onTabChange('contacts')} className={`transition-colors ${currentTab === 'contacts' ? 'text-[#07c160]' : 'hover:text-white'}`} title="通讯录"><Users size={24} strokeWidth={1.5} fill={currentTab === 'contacts' ? '#07c160' : 'none'} className={currentTab === 'contacts' ? 'text-transparent' : ''} /></button>
           <div className="relative">
-            <button 
-                onClick={() => onTabChange('moments')}
-                className={`transition-colors ${currentTab === 'moments' ? 'text-[#07c160]' : 'hover:text-white'}`}
-                title="朋友圈"
-            >
-                <Aperture size={24} strokeWidth={1.5} className={currentTab === 'moments' ? 'text-[#07c160]' : ''} />
-            </button>
-            {hasNewMoments && currentTab !== 'moments' && (
-                <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#fa5151] rounded-full border-2 border-[#2e2e2e]"></div>
-            )}
+            <button onClick={() => onTabChange('moments')} className={`transition-colors ${currentTab === 'moments' ? 'text-[#07c160]' : 'hover:text-white'}`} title="朋友圈"><Aperture size={24} strokeWidth={1.5} className={currentTab === 'moments' ? 'text-[#07c160]' : ''} /></button>
+            {hasNewMoments && currentTab !== 'moments' && (<div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#fa5151] rounded-full border-2 border-[#2e2e2e]"></div>)}
           </div>
-
-          <button 
-            onClick={() => onTabChange('stickers')}
-            className={`transition-colors ${currentTab === 'stickers' ? 'text-[#07c160]' : 'hover:text-white'}`}
-            title="自定义表情"
-          >
-            <Smile size={24} strokeWidth={1.5} className={currentTab === 'stickers' ? 'text-[#07c160]' : ''} />
-          </button>
-
-          <button 
-            onClick={() => onTabChange('files')}
-            className={`transition-colors ${currentTab === 'files' ? 'text-[#07c160]' : 'hover:text-white'}`}
-            title="文件"
-          >
-            <Folder size={24} strokeWidth={1.5} fill={currentTab === 'files' ? '#07c160' : 'none'} className={currentTab === 'files' ? 'text-transparent' : ''} />
-          </button>
+          <button onClick={() => onTabChange('stickers')} className={`transition-colors ${currentTab === 'stickers' ? 'text-[#07c160]' : 'hover:text-white'}`} title="自定义表情"><Smile size={24} strokeWidth={1.5} className={currentTab === 'stickers' ? 'text-[#07c160]' : ''} /></button>
+          <button onClick={() => onTabChange('files')} className={`transition-colors ${currentTab === 'files' ? 'text-[#07c160]' : 'hover:text-white'}`} title="文件"><Folder size={24} strokeWidth={1.5} fill={currentTab === 'files' ? '#07c160' : 'none'} className={currentTab === 'files' ? 'text-transparent' : ''} /></button>
         </div>
       </div>
 
       {/* List Area */}
       <div className="flex-1 flex flex-col bg-[#f7f7f7] min-w-0">
-        {/* Search Bar */}
+        {/* Search Bar / Header */}
         <div className="h-16 flex items-center px-3 bg-[#f7f7f7] gap-2 flex-shrink-0 relative">
           <div className="flex-1 relative">
             <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
@@ -342,7 +310,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           >
             <Plus size={14} />
           </button>
-
+          
           {/* Header Dropdown */}
           {menuOpen && (
             <div ref={menuRef} className="absolute top-14 right-2 w-32 bg-[#2e2e2e] rounded-md shadow-lg py-1 z-50 animate-fade-in-up">
@@ -357,6 +325,16 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
           )}
         </div>
+
+        {/* My ID Display (Only in Contacts tab) */}
+        {currentTab === 'contacts' && myPeerId && (
+            <div className="px-3 py-2 bg-[#f0f0f0] text-xs text-gray-500 flex justify-between items-center border-b border-gray-200">
+                <span className="truncate">我的微信号: {myPeerId}</span>
+                <button onClick={copyPeerId} className="text-[#576b95] hover:text-[#07c160] flex items-center gap-1">
+                    <Copy size={12} /> 复制
+                </button>
+            </div>
+        )}
 
         {/* Dynamic Content */}
         {renderContent()}

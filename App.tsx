@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar, { TabType } from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
@@ -7,8 +8,10 @@ import StickerManager from './components/StickerManager';
 import GroupCreator from './components/GroupCreator';
 import { Contact, Message, MessageType, User, Moment, Sticker } from './types';
 import { getGeminiReply, transcribeAudio } from './services/geminiService';
+import { p2pService, P2PMessagePayload } from './services/p2pService';
+import { dbService } from './services/dbService';
 
-// Mock Data
+// Mock Data (Used as initial defaults if DB is empty)
 const DEFAULT_USER: User = {
   id: 'me',
   name: '我',
@@ -38,18 +41,9 @@ const INITIAL_CONTACTS: Contact[] = [
         { id: 'user_99', name: '管理员', avatar: 'https://picsum.photos/seed/user_99/200' },
         { id: 'user_88', name: '小李', avatar: 'https://picsum.photos/seed/user_88/200' }
     ]
-  },
-  {
-    id: '3',
-    name: '创意写作',
-    avatar: 'https://picsum.photos/id/91/200/200',
-    lastMessage: '我们来写个故事吧。',
-    lastMessageTime: Date.now() - 86400000,
-    isAi: true
   }
 ];
 
-// Initial Messages for the first contact
 const INITIAL_MESSAGES: Record<string, Message[]> = {
   '1': [
     {
@@ -71,8 +65,7 @@ const INITIAL_MESSAGES: Record<string, Message[]> = {
         type: MessageType.TEXT,
         status: 'read'
     }
-  ],
-  '3': []
+  ]
 };
 
 const INITIAL_MOMENTS: Moment[] = [
@@ -86,15 +79,6 @@ const INITIAL_MOMENTS: Moment[] = [
       comments: [
           { id: 'c1', authorName: 'Gemini AI 助手', content: '真的很可爱！' }
       ]
-  },
-  {
-      id: 'm2',
-      author: { id: '2', name: '小李', avatar: 'https://picsum.photos/seed/user_88/200' },
-      content: '加班到深夜，看到城市的霓虹，突然觉得一切努力都是值得的。加油，打工人！💪🌃',
-      images: ['https://picsum.photos/id/122/500/300'],
-      timestamp: Date.now() - 7200000, // 2 hours ago
-      likes: ['我'],
-      comments: []
   }
 ];
 
@@ -105,76 +89,163 @@ const INITIAL_STICKERS: Sticker[] = [
 ];
 
 const App: React.FC = () => {
-  // Load from localStorage or use initials
-  const [currentUser, setCurrentUser] = useState<User>(() => {
-      const saved = localStorage.getItem('wechat_user');
-      return saved ? JSON.parse(saved) : DEFAULT_USER;
-  });
-
-  const [contacts, setContacts] = useState<Contact[]>(() => {
-    const saved = localStorage.getItem('wechat_contacts');
-    return saved ? JSON.parse(saved) : INITIAL_CONTACTS;
-  });
-
-  const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>(() => {
-    const saved = localStorage.getItem('wechat_messages');
-    return saved ? JSON.parse(saved) : INITIAL_MESSAGES;
-  });
-
+  // State - Initialized with defaults, updated via DB load
+  const [currentUser, setCurrentUser] = useState<User>(DEFAULT_USER);
+  const [contacts, setContacts] = useState<Contact[]>(INITIAL_CONTACTS);
+  const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>(INITIAL_MESSAGES);
   const [moments, setMoments] = useState<Moment[]>(INITIAL_MOMENTS);
-  const [customStickers, setCustomStickers] = useState<Sticker[]>(() => {
-      const saved = localStorage.getItem('wechat_stickers');
-      return saved ? JSON.parse(saved) : INITIAL_STICKERS;
-  });
-
+  const [customStickers, setCustomStickers] = useState<Sticker[]>(INITIAL_STICKERS);
+  
   const [activeContactId, setActiveContactId] = useState<string>('1');
   const [typingMap, setTypingMap] = useState<Record<string, boolean>>({});
   const [currentTab, setCurrentTab] = useState<TabType>('chat');
-
-  // Initialize with a red dot for demo purposes
   const [hasNewMoments, setHasNewMoments] = useState(true);
+  const [myPeerId, setMyPeerId] = useState<string>('');
+  const [isDbLoaded, setIsDbLoaded] = useState(false);
 
-  // Persistence Effects
+  // 1. Initialize DB and Load Data
   useEffect(() => {
-    localStorage.setItem('wechat_user', JSON.stringify(currentUser));
-  }, [currentUser]);
+    const initData = async () => {
+      try {
+        await dbService.init();
+        
+        const user = await dbService.getUser();
+        if (user) setCurrentUser(user);
+        else await dbService.saveUser(DEFAULT_USER);
+
+        const savedPeerId = await dbService.getPeerId();
+        
+        // Initialize P2P with saved ID (if any)
+        p2pService.init(savedPeerId || undefined);
+        p2pService.setOnIdAssigned((id) => {
+          setMyPeerId(id);
+          dbService.savePeerId(id);
+        });
+        p2pService.setOnMessageReceived((payload: P2PMessagePayload) => {
+          if (payload.type === 'CHAT_MESSAGE') {
+              handleIncomingP2PMessage(payload);
+          }
+        });
+
+        const loadedContacts = await dbService.getContacts();
+        if (loadedContacts.length > 0) setContacts(loadedContacts);
+        else await dbService.saveContacts(INITIAL_CONTACTS);
+
+        const loadedMessages = await dbService.getMessagesMap();
+        if (Object.keys(loadedMessages).length > 0) setMessagesMap(loadedMessages);
+        else await dbService.saveMessages(INITIAL_MESSAGES);
+
+        const loadedMoments = await dbService.getMoments();
+        if (loadedMoments.length > 0) setMoments(loadedMoments);
+        else await dbService.saveMoments(INITIAL_MOMENTS);
+
+        const loadedStickers = await dbService.getStickers();
+        if (loadedStickers.length > 0) setCustomStickers(loadedStickers);
+        else await dbService.saveStickers(INITIAL_STICKERS);
+
+        setIsDbLoaded(true);
+      } catch (error) {
+        console.error("Failed to load data from IndexedDB", error);
+      }
+    };
+
+    initData();
+  }, []);
+
+  // 2. Persistence Effects - Save to IndexedDB on change
+  // We skip saving if DB hasn't loaded yet to avoid overwriting DB with initial state
+  
+  useEffect(() => {
+    if (isDbLoaded) dbService.saveUser(currentUser);
+  }, [currentUser, isDbLoaded]);
 
   useEffect(() => {
-    localStorage.setItem('wechat_contacts', JSON.stringify(contacts));
-  }, [contacts]);
+    if (isDbLoaded) dbService.saveContacts(contacts);
+  }, [contacts, isDbLoaded]);
 
   useEffect(() => {
-    localStorage.setItem('wechat_messages', JSON.stringify(messagesMap));
-  }, [messagesMap]);
+    if (isDbLoaded) dbService.saveMessages(messagesMap);
+  }, [messagesMap, isDbLoaded]);
 
   useEffect(() => {
-    localStorage.setItem('wechat_stickers', JSON.stringify(customStickers));
-  }, [customStickers]);
+    if (isDbLoaded) dbService.saveMoments(moments);
+  }, [moments, isDbLoaded]);
+
+  useEffect(() => {
+    if (isDbLoaded) dbService.saveStickers(customStickers);
+  }, [customStickers, isDbLoaded]);
 
   // Sort contacts by last message time
   useEffect(() => {
-    setContacts(prev =>
+    setContacts(prev => 
       [...prev].sort((a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0))
     );
   }, [messagesMap]);
 
+  const handleIncomingP2PMessage = (payload: P2PMessagePayload) => {
+      const { message, senderInfo } = payload;
+      
+      // Check if contact exists, if not, add them
+      setContacts(prev => {
+          const existing = prev.find(c => c.peerId === senderInfo.id || c.name === senderInfo.name); 
+          if (existing) {
+              return prev.map(c => c.id === existing.id ? {
+                  ...c, 
+                  lastMessage: message.type === MessageType.TEXT ? message.content : `[${message.type}]`,
+                  lastMessageTime: Date.now()
+              } : c);
+          } else {
+              // Auto-add new P2P contact
+              const newId = `p2p_${senderInfo.id}`;
+              const newContact: Contact = {
+                  id: newId,
+                  name: senderInfo.name || "Unknown",
+                  avatar: senderInfo.avatar || 'https://picsum.photos/200',
+                  isAi: false,
+                  peerId: senderInfo.id, 
+                  lastMessage: message.type === MessageType.TEXT ? message.content : `[${message.type}]`,
+                  lastMessageTime: Date.now()
+              };
+              return [...prev, newContact];
+          }
+      });
+
+      setTimeout(() => {
+        setContacts(currentContacts => {
+            const contact = currentContacts.find(c => c.peerId === senderInfo.id || c.name === senderInfo.name);
+            const resolvedContactId = contact ? contact.id : `p2p_${senderInfo.id}`;
+            
+            const incomingMsg: Message = {
+                ...message,
+                senderId: resolvedContactId, // Force sender ID to match contact ID locally
+                status: 'read' // Mark incoming as read for now
+            };
+
+            setMessagesMap(prevMsgs => ({
+                ...prevMsgs,
+                [resolvedContactId]: [...(prevMsgs[resolvedContactId] || []), incomingMsg]
+            }));
+            return currentContacts;
+        });
+      }, 0);
+  };
+
   const handleSelectContact = (id: string) => {
     setActiveContactId(id);
     if (id !== 'new_friends' && id !== 'group_create') {
-        setCurrentTab('chat'); // Auto switch to chat view when selecting a regular contact
+        setCurrentTab('chat'); 
     }
   };
 
   const handleTabChange = (tab: TabType) => {
       setCurrentTab(tab);
-      // Clear red dot when viewing moments
       if (tab === 'moments') {
           setHasNewMoments(false);
       }
   };
 
   const toggleGroupAi = useCallback((contactId: string) => {
-      setContacts(prev => prev.map(c =>
+      setContacts(prev => prev.map(c => 
           c.id === contactId ? { ...c, hasAiActive: !c.hasAiActive } : c
       ));
   }, []);
@@ -185,8 +256,6 @@ const App: React.FC = () => {
 
   const handleCreateGroup = useCallback((name: string, selectedContactIds: string[]) => {
       const newGroupId = `group_${Date.now()}`;
-
-      // Find selected contact objects to add as members
       const selectedContacts = contacts.filter(c => selectedContactIds.includes(c.id));
       const members: User[] = [
           currentUser,
@@ -196,7 +265,7 @@ const App: React.FC = () => {
       const newGroup: Contact = {
           id: newGroupId,
           name: name,
-          avatar: 'https://picsum.photos/id/10/200/200', // Generic group avatar or generate one
+          avatar: 'https://picsum.photos/id/10/200/200',
           lastMessage: '你创建了群聊',
           lastMessageTime: Date.now(),
           isAi: false,
@@ -222,8 +291,9 @@ const App: React.FC = () => {
   }, [contacts, currentUser]);
 
   const handleAddContact = useCallback((name: string, id?: string) => {
-      const newId = id || `user_${Date.now()}`;
-      // Check if already exists
+      const isPeerId = id && id.length > 10;
+      const newId = isPeerId ? `p2p_${id}` : (id || `user_${Date.now()}`);
+      
       if (contacts.some(c => c.id === newId)) {
           setActiveContactId(newId);
           setCurrentTab('chat');
@@ -236,12 +306,16 @@ const App: React.FC = () => {
           avatar: `https://picsum.photos/seed/${newId}/200`,
           lastMessage: '我们已经是好友了，开始聊天吧',
           lastMessageTime: Date.now(),
-          isAi: false
+          isAi: false,
+          peerId: isPeerId ? id : undefined 
       };
+      
+      if (isPeerId) {
+          p2pService.connectToPeer(id!);
+      }
 
       setContacts(prev => [...prev, newContact]);
-
-      // Initialize chat with a system message
+      
       setMessagesMap(prev => ({
           ...prev,
           [newId]: [{
@@ -258,7 +332,6 @@ const App: React.FC = () => {
   }, [contacts]);
 
   const handleAddMember = useCallback((contactId: string, name: string) => {
-      // 1. Update Contact Members
       const newMemberId = `user_${Date.now()}`;
       const newMember: User = {
           id: newMemberId,
@@ -276,7 +349,6 @@ const App: React.FC = () => {
           return c;
       }));
 
-      // 2. Add System Message
       const sysMsg: Message = {
           id: Date.now().toString(),
           content: `"${currentUser.name}" 邀请 "${name}" 加入了群聊`,
@@ -293,11 +365,10 @@ const App: React.FC = () => {
 
   const handleUpdateUserAvatar = useCallback((newAvatar: string) => {
       setCurrentUser(prev => ({ ...prev, avatar: newAvatar }));
-      // In a real app, we would also update 'me' in all group members lists
   }, []);
 
   const handleUpdateContactAvatar = useCallback((contactId: string, newAvatar: string) => {
-      setContacts(prev => prev.map(c =>
+      setContacts(prev => prev.map(c => 
           c.id === contactId ? { ...c, avatar: newAvatar } : c
       ));
   }, []);
@@ -348,7 +419,6 @@ const App: React.FC = () => {
     }));
   }, [currentUser]);
 
-  // Sticker Handlers
   const handleAddSticker = useCallback((base64: string) => {
       const newSticker: Sticker = {
           id: `s_${Date.now()}`,
@@ -372,6 +442,7 @@ const App: React.FC = () => {
   }, []);
 
   const handleDeleteChat = useCallback((contactId: string) => {
+      // Update local state
       setContacts(prev => prev.filter(c => c.id !== contactId));
       setMessagesMap(prev => {
           const newMap = { ...prev };
@@ -379,11 +450,50 @@ const App: React.FC = () => {
           return newMap;
       });
       setActiveContactId('');
-  }, []);
+      
+      // Also explicitly remove from DB for thoroughness, although saving the state would overwrite it.
+      // Since we overwrite contacts list, that part is fine. 
+      // For messages, we must explicitly delete the key because we use bulk put or specific put.
+      if (isDbLoaded) {
+          dbService.deleteMessagesForContact(contactId);
+      }
+  }, [isDbLoaded]);
+
+  const handleDeleteMessage = useCallback((messageId: string) => {
+    if (!activeContactId) return;
+
+    const currentMessages = messagesMap[activeContactId] || [];
+    const updatedMessages = currentMessages.filter(msg => msg.id !== messageId);
+    
+    setMessagesMap(prev => ({
+      ...prev,
+      [activeContactId]: updatedMessages
+    }));
+
+    setContacts(prevContacts => prevContacts.map(c => {
+      if (c.id === activeContactId) {
+        const lastMsg = updatedMessages[updatedMessages.length - 1];
+        let preview = "暂无消息";
+        if (lastMsg) {
+             if (lastMsg.type === MessageType.AUDIO) preview = '[语音]';
+             else if (lastMsg.type === MessageType.IMAGE) preview = '[图片]';
+             else if (lastMsg.type === MessageType.FILE) preview = '[文件]';
+             else preview = lastMsg.content;
+        }
+        
+        return {
+          ...c,
+          lastMessage: preview,
+          lastMessageTime: lastMsg ? lastMsg.timestamp : c.lastMessageTime
+        };
+      }
+      return c;
+    }));
+  }, [activeContactId, messagesMap]);
 
   const handleSendMessage = useCallback(async (
-      content: string,
-      type: MessageType = MessageType.TEXT,
+      content: string, 
+      type: MessageType = MessageType.TEXT, 
       extra: { duration?: number, fileName?: string, fileSize?: string } = {}
   ) => {
     if (!activeContactId || activeContactId === 'new_friends' || activeContactId === 'group_create') return;
@@ -421,9 +531,24 @@ const App: React.FC = () => {
       return c;
     }));
 
-    // 2. Handle Audio Transcription if Audio
+    // 2. P2P Sending Logic
+    const currentContact = contacts.find(c => c.id === activeContactId);
+    if (currentContact?.peerId) {
+        const p2pMsg = { ...newMessage, senderId: myPeerId };
+        p2pService.sendMessage(currentContact.peerId, p2pMsg, { ...currentUser, id: myPeerId });
+        
+        setTimeout(() => {
+            setMessagesMap(prev => ({
+                ...prev,
+                [activeContactId]: prev[activeContactId].map(m => m.id === newMessageId ? { ...m, status: 'sent' } : m)
+            }));
+        }, 500);
+        return; 
+    }
+
+
+    // 3. AI/Local Audio Transcription (Existing Logic)
     if (type === MessageType.AUDIO) {
-        // Trigger transcription in background
         transcribeAudio(content).then(text => {
             setMessagesMap(prev => {
                 const msgs = prev[activeContactId] || [];
@@ -435,40 +560,36 @@ const App: React.FC = () => {
         });
     }
 
-    // 3. Simulate Sending Delay -> Mark as SENT
+    // Simulate Sending Delay -> Mark as SENT (For non-P2P)
     setTimeout(() => {
       setMessagesMap(prev => {
         const currentMessages = prev[activeContactId] || [];
         return {
           ...prev,
-          [activeContactId]: currentMessages.map(msg =>
+          [activeContactId]: currentMessages.map(msg => 
             msg.id === newMessageId ? { ...msg, status: 'sent' } : msg
           )
         };
       });
     }, 800);
 
-    // 4. Check if contact is AI or if Group AI is active
-    const currentContact = contacts.find(c => c.id === activeContactId);
+    // 4. AI Reply Logic
     const shouldAiReply = currentContact?.isAi || (currentContact?.isGroup && currentContact?.hasAiActive);
 
     if (shouldAiReply) {
       setTypingMap(prev => ({ ...prev, [activeContactId]: true }));
-
       const history = messagesMap[activeContactId] || [];
       const fullHistory = [...history, newMessage];
 
       try {
         const aiReplyText = await getGeminiReply(fullHistory, currentContact?.name || "Chat", currentContact?.isGroup);
 
-        // Mark the user's message as READ when AI replies
         setMessagesMap(prev => {
             const currentMessages = prev[activeContactId] || [];
-            const updatedMessages = currentMessages.map(msg =>
+            const updatedMessages = currentMessages.map(msg => 
                 msg.id === newMessageId ? { ...msg, status: 'read' as const } : msg
             );
 
-            // In group chat, AI is a specific participant
             const senderId = currentContact?.isGroup ? 'gemini_ai' : activeContactId;
             const senderName = currentContact?.isGroup ? 'Gemini AI' : undefined;
 
@@ -488,7 +609,6 @@ const App: React.FC = () => {
             };
         });
 
-        // Update Last Message in Sidebar
         setContacts(prev => prev.map(c => {
           if (c.id === activeContactId) {
             return { ...c, lastMessage: aiReplyText, lastMessageTime: Date.now() };
@@ -502,118 +622,36 @@ const App: React.FC = () => {
         setTypingMap(prev => ({ ...prev, [activeContactId]: false }));
       }
     }
-  }, [activeContactId, contacts, messagesMap]);
-
-  const handleDeleteMessage = useCallback((messageId: string) => {
-    if (!activeContactId) return;
-
-    // Get current messages from state
-    const currentMessages = messagesMap[activeContactId] || [];
-    const updatedMessages = currentMessages.filter(msg => msg.id !== messageId);
-
-    // Update messages map
-    setMessagesMap(prev => ({
-      ...prev,
-      [activeContactId]: updatedMessages
-    }));
-
-    // Update sidebar preview
-    setContacts(prevContacts => prevContacts.map(c => {
-      if (c.id === activeContactId) {
-        const lastMsg = updatedMessages[updatedMessages.length - 1];
-        let preview = "暂无消息";
-        if (lastMsg) {
-             if (lastMsg.type === MessageType.AUDIO) preview = '[语音]';
-             else if (lastMsg.type === MessageType.IMAGE) preview = '[图片]';
-             else if (lastMsg.type === MessageType.FILE) preview = '[文件]';
-             else preview = lastMsg.content;
-        }
-
-        return {
-          ...c,
-          lastMessage: preview,
-          lastMessageTime: lastMsg ? lastMsg.timestamp : c.lastMessageTime
-        };
-      }
-      return c;
-    }));
-  }, [activeContactId, messagesMap]);
+  }, [activeContactId, contacts, messagesMap, myPeerId, currentUser]);
 
   const activeContact = contacts.find(c => c.id === activeContactId);
   const currentMessages = activeContactId ? (messagesMap[activeContactId] || []) : [];
   const isTyping = activeContactId ? (typingMap[activeContactId] || false) : false;
 
-  // Determine what to render in the main area
   let mainContent;
 
   if (currentTab === 'moments') {
       mainContent = (
         <div className="flex flex-col w-full h-full relative">
              <div className="md:hidden absolute top-4 left-4 z-50">
-               <button
-                 onClick={() => handleTabChange('chat')}
-                 className="bg-gray-200 p-2 rounded-full text-gray-600"
-               >
-                 ← 返回
-               </button>
+               <button onClick={() => handleTabChange('chat')} className="bg-gray-200 p-2 rounded-full text-gray-600">← 返回</button>
             </div>
-            <Moments
-              currentUser={currentUser}
-              moments={moments}
-              onAddMoment={handleAddMoment}
-              onAddComment={handleAddComment}
-              onLikeMoment={handleLikeMoment}
-            />
+            <Moments currentUser={currentUser} moments={moments} onAddMoment={handleAddMoment} onAddComment={handleAddComment} onLikeMoment={handleLikeMoment}/>
         </div>
       );
   } else if (currentTab === 'stickers') {
-      mainContent = (
-          <StickerManager
-            stickers={customStickers}
-            onAddSticker={handleAddSticker}
-            onDeleteSticker={handleDeleteSticker}
-            onReorderStickers={handleReorderStickers}
-          />
-      );
+      mainContent = <StickerManager stickers={customStickers} onAddSticker={handleAddSticker} onDeleteSticker={handleDeleteSticker} onReorderStickers={handleReorderStickers}/>;
   } else if (activeContactId === 'new_friends') {
       mainContent = <NewFriends onAddContact={handleAddContact} />;
   } else if (activeContactId === 'group_create') {
-      mainContent = (
-          <GroupCreator
-              contacts={contacts}
-              currentUser={currentUser}
-              onCreateGroup={handleCreateGroup}
-              onCancel={() => {
-                  setActiveContactId('');
-                  setCurrentTab('chat');
-              }}
-          />
-      );
+      mainContent = <GroupCreator contacts={contacts} currentUser={currentUser} onCreateGroup={handleCreateGroup} onCancel={() => { setActiveContactId(''); setCurrentTab('chat'); }}/>;
   } else if (activeContact) {
       mainContent = (
         <div className="flex flex-col w-full h-full relative">
-          {/* Mobile Back Button Overlay */}
           <div className="md:hidden absolute top-4 left-4 z-50">
-             <button
-               onClick={() => setActiveContactId('')}
-               className="bg-gray-200 p-2 rounded-full text-gray-600"
-             >
-               ← 返回
-             </button>
+             <button onClick={() => setActiveContactId('')} className="bg-gray-200 p-2 rounded-full text-gray-600">← 返回</button>
           </div>
-          <ChatWindow
-            activeContact={activeContact}
-            messages={currentMessages}
-            currentUserAvatar={currentUser.avatar}
-            onSendMessage={handleSendMessage}
-            onDeleteMessage={handleDeleteMessage}
-            onToggleGroupAi={toggleGroupAi}
-            onAddMember={handleAddMember}
-            onUpdateContactAvatar={handleUpdateContactAvatar}
-            onDeleteChat={handleDeleteChat}
-            isTyping={isTyping}
-            stickers={customStickers}
-          />
+          <ChatWindow activeContact={activeContact} messages={currentMessages} currentUserAvatar={currentUser.avatar} onSendMessage={handleSendMessage} onDeleteMessage={handleDeleteMessage} onToggleGroupAi={toggleGroupAi} onAddMember={handleAddMember} onUpdateContactAvatar={handleUpdateContactAvatar} onDeleteChat={handleDeleteChat} isTyping={isTyping} stickers={customStickers}/>
         </div>
       );
   } else {
@@ -629,25 +667,10 @@ const App: React.FC = () => {
 
   return (
     <div className="flex items-center justify-center h-screen w-screen bg-[#e5e5e5]">
-      {/* Main App Container centered on screen like desktop app */}
-      <div className="flex w-full h-full md:w-[1000px] md:rounded-lg overflow-hidden shadow-2xl bg-[#f5f5f5]">
-        {/* Left Sidebar */}
+      <div className="flex w-full h-full md:w-[1000px] md:h-[800px] md:rounded-lg overflow-hidden shadow-2xl bg-[#f5f5f5]">
         <div className={`${(activeContactId || currentTab === 'moments' || currentTab === 'stickers') ? 'hidden md:flex' : 'flex'} w-full md:w-auto h-full`}>
-          <Sidebar
-            contacts={contacts}
-            activeContactId={activeContactId}
-            onSelectContact={handleSelectContact}
-            currentTab={currentTab}
-            onTabChange={handleTabChange}
-            onAddContact={(name) => handleAddContact(name)}
-            onStartGroupChat={handleStartGroupChat}
-            hasNewMoments={hasNewMoments}
-            currentUser={currentUser}
-            onUpdateUserAvatar={handleUpdateUserAvatar}
-          />
+          <Sidebar contacts={contacts} activeContactId={activeContactId} onSelectContact={handleSelectContact} currentTab={currentTab} onTabChange={handleTabChange} onAddContact={(name) => handleAddContact(name)} onStartGroupChat={handleStartGroupChat} hasNewMoments={hasNewMoments} currentUser={currentUser} onUpdateUserAvatar={handleUpdateUserAvatar} myPeerId={myPeerId} />
         </div>
-
-        {/* Right Content Area */}
         <div className={`${(!activeContactId && currentTab !== 'moments' && currentTab !== 'stickers') ? 'hidden md:flex' : 'flex'} flex-1 h-full`}>
           {mainContent}
         </div>

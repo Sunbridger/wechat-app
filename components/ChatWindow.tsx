@@ -59,6 +59,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const groupAvatarInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // Audio Ref to ensure single playback
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -76,6 +79,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           searchInputRef.current.focus();
       }
   }, [isSearching]);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+      return () => {
+          if (currentAudioRef.current) {
+              currentAudioRef.current.pause();
+              currentAudioRef.current = null;
+          }
+      };
+  }, []);
 
   // Close context menu on clicking anywhere
   useEffect(() => {
@@ -181,11 +194,40 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   };
 
   const playAudio = (base64: string, id: string) => {
+    // 1. Stop currently playing audio if any
+    if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.currentTime = 0;
+    }
+
+    // If clicking the already playing audio, just stop it (toggle behavior)
+    if (playingAudioId === id) {
+        setPlayingAudioId(null);
+        currentAudioRef.current = null;
+        return;
+    }
+
+    // 2. Start new audio
     const audio = new Audio(base64);
+    currentAudioRef.current = audio;
+
     audio.onplay = () => setPlayingAudioId(id);
-    audio.onended = () => setPlayingAudioId(null);
-    audio.onpause = () => setPlayingAudioId(null);
-    audio.play();
+    audio.onended = () => {
+        setPlayingAudioId(null);
+        currentAudioRef.current = null;
+    };
+    audio.onpause = () => {
+         // Only clear state if this specific audio instance paused
+         if (currentAudioRef.current === audio) {
+             setPlayingAudioId(null);
+         }
+    };
+
+    audio.play().catch(err => {
+        console.error("Failed to play audio:", err);
+        setPlayingAudioId(null);
+        currentAudioRef.current = null;
+    });
   };
 
   const toggleSettings = (e: React.MouseEvent) => {
@@ -547,9 +589,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                             >
                                 {isAudio && (
                                 <>
-                                    {!isMe && <Wifi size={16} className={`transform rotate-90 ${isPlaying ? 'text-gray-800' : 'text-gray-500'}`} />}
+                                    {!isMe && <Wifi size={16} className={`transform rotate-90 ${isPlaying ? 'text-[#07c160] animate-pulse' : 'text-gray-500'}`} />}
                                     <span className="text-xs font-medium select-none">{msg.audioDuration || 0}"</span>
-                                    {isMe && <Wifi size={16} className={`transform -rotate-90 ${isPlaying ? 'text-black' : 'text-gray-600'}`} />}
+                                    {isMe && <Wifi size={16} className={`transform -rotate-90 ${isPlaying ? 'text-black animate-pulse' : 'text-gray-600'}`} />}
                                 </>
                                 )}
 

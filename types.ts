@@ -33,6 +33,7 @@ export interface Contact {
   isGroup?: boolean; // For group chat logic
   hasAiActive?: boolean; // If AI is enabled in this group
   members?: User[]; // For group chats
+  peerId?: string; // WebRTC Peer ID for real P2P IM
 }
 
 export interface User {

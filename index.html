@@ -2,18 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>WeChat AI Clone</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
-      rel="stylesheet"
-    />
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
       body {
         font-family: 'Inter', sans-serif;
         background-color: #e5e5e5; /* Desktop background color usually seen behind the app window */
         overflow: hidden; /* Prevent body scroll */
+        overscroll-behavior: none; /* Prevent pull-to-refresh on mobile */
       }
       /* Custom Scrollbar for Webkit */
       ::-webkit-scrollbar {
@@ -45,7 +44,7 @@
         animation: fadeInUp 0.3s ease-out forwards;
       }
     </style>
-    <!-- <script type="importmap">
+  <script type="importmap">
 {
   "imports": {
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
@@ -55,10 +54,9 @@
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0"
   }
 }
-</script> -->
-  </head>
+</script>
+</head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
   </body>
 </html>

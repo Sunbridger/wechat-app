@@ -16,16 +16,21 @@ const NewFriends: React.FC<NewFriendsProps> = ({ onAddContact }) => {
     setIsSearching(true);
     setSearchResult(null);
 
-    // Simulate API search delay
+    // In a real P2P app, we might "connect" here to verify existence,
+    // but for this demo we allow adding any ID and assume it's valid or a name.
+    
     setTimeout(() => {
       setIsSearching(false);
-      // Mock result based on search term
+      
+      // If it looks like a long Peer ID, treat it as such
+      const isPeerId = searchTerm.length > 10;
+      
       setSearchResult({
-        name: searchTerm, // Use the search term as the name for this demo
-        id: `new_user_${Date.now()}`,
+        name: isPeerId ? "P2P Friend" : searchTerm, 
+        id: searchTerm,
         avatar: `https://picsum.photos/seed/${searchTerm}/200`
       });
-    }, 800);
+    }, 600);
   };
 
   const handleAdd = () => {
@@ -57,7 +62,7 @@ const NewFriends: React.FC<NewFriendsProps> = ({ onAddContact }) => {
           </div>
           <input 
             type="text" 
-            placeholder="微信号/手机号/QQ号" 
+            placeholder="微信号/手机号/Peer ID" 
             className="w-full bg-white py-3 pl-10 pr-4 rounded-md border border-gray-200 focus:outline-none focus:border-[#07c160] transition-colors"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -88,7 +93,9 @@ const NewFriends: React.FC<NewFriendsProps> = ({ onAddContact }) => {
                     />
                     <div className="ml-4 flex-1">
                         <h3 className="text-lg font-medium text-black">{searchResult.name}</h3>
-                        <p className="text-sm text-gray-500 mt-1">地区: 未知</p>
+                        <p className="text-sm text-gray-500 mt-1">
+                            {searchResult.id.length > 10 ? "P2P ID: " + searchResult.id.substring(0,15) + "..." : "地区: 未知"}
+                        </p>
                     </div>
                     <button 
                         onClick={handleAdd}
@@ -103,7 +110,7 @@ const NewFriends: React.FC<NewFriendsProps> = ({ onAddContact }) => {
                     <div className="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center mb-4">
                         <Search size={32} className="text-white" />
                     </div>
-                    <p className="text-gray-500">搜索添加新朋友</p>
+                    <p className="text-gray-500">搜索添加新朋友 (支持 Peer ID)</p>
                 </div>
             )}
         </div>
