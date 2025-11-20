@@ -1,0 +1,7 @@
+{
+  "name": "WeChat AI Clone",
+  "description": "A WeChat-inspired web messaging application powered by Gemini 2.5 Flash for intelligent, real-time conversations.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
