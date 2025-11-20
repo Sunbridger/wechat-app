@@ -1,4 +1,3 @@
-
 import { Contact, Message, Moment, Sticker, User } from '../types';
 
 const DB_NAME = 'WeChatCloneDB';

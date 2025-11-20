@@ -21,16 +21,13 @@ class P2PService {
   public init(savedId?: string) {
     if (this.peer) return;
 
-    // Initialize Peer. If savedId exists, try to reuse it (though PeerJS might reject if taken)
-    // For simplicity in this demo, we let PeerJS assign one if savedId fails or is null,
-    // but in a real app with a server, you'd authenticate to get your ID.
-    // Here we try to use the savedId if provided, otherwise random.
+    // Initialize Peer. If savedId exists, try to reuse it.
+    // We only use the standard Google STUN server to avoid "transport=udp" syntax errors in some browsers.
     this.peer = new Peer(savedId || undefined, {
       debug: 2,
       config: {
         'iceServers': [
-          { url: 'stun:stun.l.google.com:19302' },
-          { url: 'stun:global.stun.twilio.com:3478?transport=udp' }
+          { url: 'stun:stun.l.google.com:19302' }
         ]
       }
     });
@@ -48,7 +45,7 @@ class P2PService {
     this.peer.on('error', (err: any) => {
       console.error('PeerJS error:', err);
       if (err.type === 'unavailable-id') {
-         // Retry without ID
+         // Retry without ID if the saved one is taken/invalid
          this.peer.destroy();
          this.peer = null;
          this.init(); 
