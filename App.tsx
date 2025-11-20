@@ -27,7 +27,13 @@ const INITIAL_CONTACTS: Contact[] = [
     lastMessage: '欢迎新成员',
     lastMessageTime: Date.now() - 3600000,
     isAi: false,
-    isGroup: true
+    isGroup: true,
+    hasAiActive: false,
+    members: [
+        { id: 'me', name: '我', avatar: 'https://picsum.photos/id/64/200/200' },
+        { id: 'user_99', name: '管理员', avatar: 'https://picsum.photos/seed/user_99/200' },
+        { id: 'user_88', name: '小李', avatar: 'https://picsum.photos/seed/user_88/200' }
+    ]
   },
   {
     id: '3',
@@ -102,7 +108,51 @@ const App: React.FC = () => {
     setCurrentTab('chat'); // Auto switch to chat view when selecting a contact
   };
 
-  const handleSendMessage = useCallback(async (content: string, type: MessageType = MessageType.TEXT, duration?: number) => {
+  const toggleGroupAi = useCallback((contactId: string) => {
+      setContacts(prev => prev.map(c => 
+          c.id === contactId ? { ...c, hasAiActive: !c.hasAiActive } : c
+      ));
+  }, []);
+
+  const handleAddMember = useCallback((contactId: string, name: string) => {
+      // 1. Update Contact Members
+      const newMemberId = `user_${Date.now()}`;
+      const newMember: User = {
+          id: newMemberId,
+          name: name,
+          avatar: `https://picsum.photos/seed/${newMemberId}/200`
+      };
+
+      setContacts(prev => prev.map(c => {
+          if (c.id === contactId) {
+              return {
+                  ...c,
+                  members: [...(c.members || []), newMember]
+              };
+          }
+          return c;
+      }));
+
+      // 2. Add System Message
+      const sysMsg: Message = {
+          id: Date.now().toString(),
+          content: `"${CURRENT_USER.name}" 邀请 "${name}" 加入了群聊`,
+          senderId: 'system',
+          timestamp: Date.now(),
+          type: MessageType.SYSTEM
+      };
+
+      setMessagesMap(prev => ({
+          ...prev,
+          [contactId]: [...(prev[contactId] || []), sysMsg]
+      }));
+  }, []);
+
+  const handleSendMessage = useCallback(async (
+      content: string, 
+      type: MessageType = MessageType.TEXT, 
+      extra: { duration?: number, fileName?: string, fileSize?: string } = {}
+  ) => {
     if (!activeContactId) return;
 
     const newMessageId = Date.now().toString();
@@ -113,8 +163,10 @@ const App: React.FC = () => {
       senderId: 'me',
       timestamp: Date.now(),
       type: type,
-      audioDuration: duration,
-      status: 'sending'
+      audioDuration: extra.duration,
+      status: 'sending',
+      fileName: extra.fileName,
+      fileSize: extra.fileSize
     };
 
     // 1. Update UI with User Message (Sending)
@@ -124,7 +176,11 @@ const App: React.FC = () => {
     }));
 
     // Update Last Message in Sidebar
-    const previewText = type === MessageType.AUDIO ? '[语音]' : content;
+    let previewText = content;
+    if (type === MessageType.AUDIO) previewText = '[语音]';
+    else if (type === MessageType.IMAGE) previewText = '[图片]';
+    else if (type === MessageType.FILE) previewText = '[文件]';
+
     setContacts(prev => prev.map(c => {
       if (c.id === activeContactId) {
         return { ...c, lastMessage: previewText, lastMessageTime: Date.now() };
@@ -159,16 +215,18 @@ const App: React.FC = () => {
       });
     }, 800);
 
-    // 4. Check if contact is AI and trigger reply
+    // 4. Check if contact is AI or if Group AI is active
     const currentContact = contacts.find(c => c.id === activeContactId);
-    if (currentContact?.isAi) {
+    const shouldAiReply = currentContact?.isAi || (currentContact?.isGroup && currentContact?.hasAiActive);
+
+    if (shouldAiReply) {
       setTypingMap(prev => ({ ...prev, [activeContactId]: true }));
 
       const history = messagesMap[activeContactId] || [];
       const fullHistory = [...history, newMessage];
 
       try {
-        const aiReplyText = await getGeminiReply(fullHistory, currentContact.name);
+        const aiReplyText = await getGeminiReply(fullHistory, currentContact?.name || "Chat", currentContact?.isGroup);
 
         // Mark the user's message as READ when AI replies
         setMessagesMap(prev => {
@@ -177,10 +235,15 @@ const App: React.FC = () => {
                 msg.id === newMessageId ? { ...msg, status: 'read' as const } : msg
             );
 
+            // In group chat, AI is a specific participant
+            const senderId = currentContact?.isGroup ? 'gemini_ai' : activeContactId;
+            const senderName = currentContact?.isGroup ? 'Gemini AI' : undefined;
+
             const aiMessage: Message = {
                 id: (Date.now() + 1).toString(),
                 content: aiReplyText,
-                senderId: activeContactId,
+                senderId: senderId,
+                senderName: senderName,
                 timestamp: Date.now(),
                 type: MessageType.TEXT,
                 status: 'sent'
@@ -227,7 +290,10 @@ const App: React.FC = () => {
         const lastMsg = updatedMessages[updatedMessages.length - 1];
         let preview = "暂无消息";
         if (lastMsg) {
-          preview = lastMsg.type === MessageType.AUDIO ? '[语音]' : lastMsg.content;
+             if (lastMsg.type === MessageType.AUDIO) preview = '[语音]';
+             else if (lastMsg.type === MessageType.IMAGE) preview = '[图片]';
+             else if (lastMsg.type === MessageType.FILE) preview = '[文件]';
+             else preview = lastMsg.content;
         }
         
         return {
@@ -278,6 +344,8 @@ const App: React.FC = () => {
                 currentUserAvatar={CURRENT_USER.avatar}
                 onSendMessage={handleSendMessage}
                 onDeleteMessage={handleDeleteMessage}
+                onToggleGroupAi={toggleGroupAi}
+                onAddMember={handleAddMember}
                 isTyping={isTyping}
               />
             </div>

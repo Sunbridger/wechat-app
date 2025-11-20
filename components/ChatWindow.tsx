@@ -1,15 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreHorizontal, Smile, Paperclip, FolderOpen, Trash2, Mic, Wifi, Loader2 } from 'lucide-react';
+import { MoreHorizontal, Smile, Paperclip, FolderOpen, Trash2, Mic, Wifi, Loader2, FileText, Plus } from 'lucide-react';
 import { Contact, Message, MessageType } from '../types';
 
 interface ChatWindowProps {
   activeContact: Contact;
   messages: Message[];
   currentUserAvatar: string;
-  onSendMessage: (content: string, type: MessageType, duration?: number) => void;
+  onSendMessage: (content: string, type: MessageType, extra?: { duration?: number, fileName?: string, fileSize?: string }) => void;
   onDeleteMessage: (messageId: string) => void;
+  onToggleGroupAi?: (contactId: string) => void;
+  onAddMember?: (contactId: string, name: string) => void;
   isTyping: boolean;
 }
+
+const EMOJIS = [
+  "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "🥲", "☺️", 
+  "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", 
+  "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", 
+  "😎", "🥸", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", 
+  "🙁", "☹️", "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤", 
+  "😠", "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰",
+  "👍", "👎", "👊", "👌", "🤝", "🙏", "👋", "❤️", "💔", "🎉"
+];
 
 const ChatWindow: React.FC<ChatWindowProps> = ({ 
   activeContact, 
@@ -17,10 +29,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   currentUserAvatar, 
   onSendMessage,
   onDeleteMessage,
+  onToggleGroupAi,
+  onAddMember,
   isTyping
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; messageId: string } | null>(null);
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
   const [isRecording, setIsRecording] = useState(false);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
@@ -29,6 +45,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const startTimeRef = useRef<number>(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -40,10 +57,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
   // Close context menu on clicking anywhere
   useEffect(() => {
-    const handleClick = () => setContextMenu(null);
+    const handleClick = (e: MouseEvent) => {
+       setContextMenu(null);
+       if (settingsMenuOpen && !(e.target as HTMLElement).closest('#settings-container')) {
+           setSettingsMenuOpen(false);
+       }
+       if (showEmojiPicker && !(e.target as HTMLElement).closest('#emoji-container')) {
+           setShowEmojiPicker(false);
+       }
+    };
     document.addEventListener('click', handleClick);
     return () => document.removeEventListener('click', handleClick);
-  }, []);
+  }, [settingsMenuOpen, showEmojiPicker]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -56,6 +81,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     if (inputValue.trim()) {
       onSendMessage(inputValue, MessageType.TEXT);
       setInputValue('');
+      setShowEmojiPicker(false);
     }
   };
 
@@ -103,10 +129,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         reader.readAsDataURL(audioBlob);
         reader.onloadend = () => {
           const base64data = reader.result as string;
-          onSendMessage(base64data, MessageType.AUDIO, duration);
+          onSendMessage(base64data, MessageType.AUDIO, { duration });
         };
         
-        // Stop all tracks
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -133,17 +158,112 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     audio.play();
   };
 
+  const toggleSettings = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setSettingsMenuOpen(!settingsMenuOpen);
+  };
+
+  const toggleEmojiPicker = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setShowEmojiPicker(!showEmojiPicker);
+  };
+
+  const addEmoji = (emoji: string) => {
+      setInputValue(prev => prev + emoji);
+  };
+
+  const handleFileUploadClick = () => {
+      fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+          const base64 = reader.result as string;
+          const isImage = file.type.startsWith('image/');
+          
+          // Format file size
+          let sizeStr = '';
+          if (file.size < 1024) sizeStr = `${file.size} B`;
+          else if (file.size < 1024 * 1024) sizeStr = `${(file.size / 1024).toFixed(1)} KB`;
+          else sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+
+          onSendMessage(
+              base64, 
+              isImage ? MessageType.IMAGE : MessageType.FILE, 
+              { fileName: file.name, fileSize: sizeStr }
+          );
+      };
+      reader.readAsDataURL(file);
+      
+      // Reset input
+      if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleAddMemberClick = () => {
+      const name = prompt("请输入新成员的名字：");
+      if (name && onAddMember) {
+          onAddMember(activeContact.id, name);
+      }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#f5f5f5] w-full relative">
       {/* Header */}
       <div className="h-16 border-b border-[#e7e7e7] flex justify-between items-center px-6 bg-[#f5f5f5] flex-shrink-0 z-10">
         <div className="font-medium text-[16px] text-black select-none flex items-center gap-2">
           {activeContact.name}
-          {activeContact.isGroup && <span className="text-xs text-gray-400">(群聊)</span>}
+          {activeContact.isGroup && <span className="text-xs text-gray-400">({activeContact.members?.length || 1})</span>}
         </div>
-        <button className="text-gray-600 hover:text-black">
-          <MoreHorizontal size={20} />
-        </button>
+        <div id="settings-container" className="relative">
+            <button onClick={toggleSettings} className="text-gray-600 hover:text-black p-1 rounded hover:bg-gray-200 transition-colors">
+            <MoreHorizontal size={20} />
+            </button>
+            {settingsMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 shadow-lg rounded w-64 z-50 animate-fade-in-up">
+                    {/* Member Grid for Groups */}
+                    {activeContact.isGroup && (
+                        <div className="p-4 border-b border-gray-100">
+                            <div className="grid grid-cols-4 gap-2 mb-2">
+                                {activeContact.members?.slice(0, 7).map(member => (
+                                    <div key={member.id} className="flex flex-col items-center">
+                                        <img src={member.avatar} alt={member.name} className="w-10 h-10 rounded-[4px] object-cover" />
+                                        <span className="text-[10px] text-gray-500 mt-1 truncate w-full text-center">{member.name}</span>
+                                    </div>
+                                ))}
+                                <button 
+                                    onClick={handleAddMemberClick}
+                                    className="w-10 h-10 border border-dashed border-gray-300 rounded-[4px] flex items-center justify-center hover:bg-gray-50 text-gray-400"
+                                >
+                                    <Plus size={20} />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Settings Options */}
+                    <div className="py-2">
+                        {activeContact.isGroup && (
+                            <div className="px-4 py-2 text-sm text-gray-700 flex items-center justify-between hover:bg-gray-50 cursor-pointer" onClick={() => onToggleGroupAi && onToggleGroupAi(activeContact.id)}>
+                                <span>AI 助手</span>
+                                <div className={`w-9 h-5 rounded-full relative transition-colors ${activeContact.hasAiActive ? 'bg-[#07c160]' : 'bg-gray-300'}`}>
+                                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform transform ${activeContact.hasAiActive ? 'left-[18px]' : 'left-0.5'}`}></div>
+                                </div>
+                            </div>
+                        )}
+                        <div className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+                            <span>查找聊天记录</span>
+                        </div>
+                         <div className="px-4 py-2 text-sm text-red-600 hover:bg-gray-50 cursor-pointer border-t border-gray-100 mt-1">
+                            <span>{activeContact.isGroup ? '删除并退出' : '删除聊天'}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
       </div>
 
       {/* Message Area */}
@@ -158,8 +278,21 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         
         {messages.map((msg) => {
           const isMe = msg.senderId === 'me';
+          const isSystem = msg.type === MessageType.SYSTEM;
           const isAudio = msg.type === MessageType.AUDIO;
+          const isImage = msg.type === MessageType.IMAGE;
+          const isFile = msg.type === MessageType.FILE;
           const isPlaying = playingAudioId === msg.id;
+
+          if (isSystem) {
+              return (
+                <div key={msg.id} className="flex justify-center mb-4 animate-fade-in-up">
+                    <span className="bg-[#dadada] text-white text-xs py-1 px-2 rounded-[4px]">
+                        {msg.content}
+                    </span>
+                </div>
+              );
+          }
 
           return (
             <div key={msg.id} className={`flex mb-4 ${isMe ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
@@ -167,7 +300,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 <img 
                   src={msg.senderId !== activeContact.id && activeContact.isGroup ? `https://picsum.photos/seed/${msg.senderId}/200` : activeContact.avatar} 
                   alt="Sender" 
-                  className="w-9 h-9 rounded-md mr-2.5 self-start select-none"
+                  className="w-9 h-9 rounded-md mr-2.5 self-start select-none object-cover"
                 />
               )}
               
@@ -183,10 +316,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 <div className={`flex items-end gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}>
                     {/* Status Indicator for Me */}
                     {isMe && (
-                    <div className="flex flex-col justify-end pb-1 min-w-[30px] items-end">
+                    <div className="flex flex-col justify-end pb-1 min-w-[30px] items-end text-right">
                         {msg.status === 'sending' && <Loader2 size={14} className="animate-spin text-gray-400" />}
                         {msg.status === 'sent' && <span className="text-[10px] text-gray-400 font-light select-none">已发送</span>}
-                        {msg.status === 'read' && <span className="text-[10px] text-gray-400 font-light select-none">已读</span>}
+                        {msg.status === 'read' && (
+                            <span className="text-[10px] text-gray-400 font-light select-none">
+                                {activeContact.isGroup ? '1人已读' : '已读'}
+                            </span>
+                        )}
                     </div>
                     )}
 
@@ -196,21 +333,42 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                         <div 
                             onContextMenu={(e) => handleContextMenu(e, msg.id)}
                             onClick={() => isAudio && playAudio(msg.content, msg.id)}
-                            className={`px-2.5 py-2 rounded-[4px] text-[14px] leading-relaxed break-words shadow-sm cursor-default ${
-                            isMe 
-                                ? 'bg-[#95ec69] text-black border border-[#8ad961]' 
-                                : 'bg-white text-black border border-[#ededed]'
-                            } ${isAudio ? 'flex items-center gap-2 cursor-pointer min-w-[80px]' : ''}`}
+                            className={`rounded-[4px] text-[14px] leading-relaxed break-words shadow-sm cursor-default overflow-hidden ${
+                                isAudio 
+                                    ? (isMe ? 'bg-[#95ec69] border border-[#8ad961]' : 'bg-white border border-[#ededed]') + ' px-2.5 py-2 flex items-center gap-2 cursor-pointer min-w-[80px]'
+                                : isImage 
+                                    ? 'bg-transparent border-0 shadow-none'
+                                : isFile
+                                    ? 'bg-white border border-[#ededed] p-3 flex items-center gap-3 min-w-[200px]'
+                                : (isMe ? 'bg-[#95ec69] text-black border border-[#8ad961] px-2.5 py-2' : 'bg-white text-black border border-[#ededed] px-2.5 py-2')
+                            }`}
                         >
-                            {isAudio ? (
+                            {isAudio && (
                             <>
-                                {/* Audio Wave Icon Placeholder */}
                                 {!isMe && <Wifi size={16} className={`transform rotate-90 ${isPlaying ? 'text-gray-800' : 'text-gray-500'}`} />}
                                 <span className="text-xs font-medium select-none">{msg.audioDuration || 0}"</span>
                                 {isMe && <Wifi size={16} className={`transform -rotate-90 ${isPlaying ? 'text-black' : 'text-gray-600'}`} />}
                             </>
-                            ) : (
-                            <span className="whitespace-pre-wrap">{msg.content}</span>
+                            )}
+
+                            {isImage && (
+                                <img src={msg.content} alt="Shared Image" className="max-w-full max-h-[300px] rounded-md border border-gray-200" />
+                            )}
+
+                            {isFile && (
+                                <>
+                                    <div className="bg-orange-100 p-2 rounded">
+                                        <FileText size={24} className="text-orange-500" />
+                                    </div>
+                                    <div className="flex flex-col min-w-0">
+                                        <span className="text-sm text-black font-medium truncate max-w-[180px]">{msg.fileName || "未知文件"}</span>
+                                        <span className="text-xs text-gray-400">{msg.fileSize || "未知大小"}</span>
+                                    </div>
+                                </>
+                            )}
+
+                            {!isAudio && !isImage && !isFile && (
+                                <span className="whitespace-pre-wrap">{msg.content}</span>
                             )}
                         </div>
                         </div>
@@ -222,11 +380,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                                 {msg.transcription}
                             </div>
                         )}
-                         {isAudio && !msg.transcription && isMe && msg.status !== 'sending' && (
-                             <div className="mt-1 text-[10px] text-gray-300 italic px-1">
-                                 正在转文字...
-                             </div>
-                         )}
                     </div>
                 </div>
               </div>
@@ -279,10 +432,27 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       )}
 
       {/* Input Area */}
-      <div className="h-[160px] border-t border-[#e7e7e7] bg-[#f5f5f5] flex flex-col flex-shrink-0 z-10">
+      <div className="h-[160px] border-t border-[#e7e7e7] bg-[#f5f5f5] flex flex-col flex-shrink-0 z-10 relative">
+        
+        {/* Emoji Picker Popup */}
+        {showEmojiPicker && (
+            <div id="emoji-container" className="absolute bottom-[165px] left-4 bg-white border border-gray-200 shadow-lg rounded-lg p-4 w-80 h-64 overflow-y-auto custom-scrollbar z-50 animate-fade-in-up">
+                <div className="grid grid-cols-8 gap-2">
+                    {EMOJIS.map(emoji => (
+                        <button 
+                            key={emoji} 
+                            onClick={() => addEmoji(emoji)}
+                            className="text-xl hover:bg-gray-100 p-1 rounded transition-colors"
+                        >
+                            {emoji}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        )}
+
         {/* Toolbar */}
         <div className="h-10 flex items-center px-4 gap-4 text-[#5a5a5a]">
-          {/* Mic Toggle */}
           <button 
             className={`hover:text-black transition-colors ${inputMode === 'voice' ? 'text-green-600' : ''}`}
             onClick={() => setInputMode(inputMode === 'text' ? 'voice' : 'text')}
@@ -291,9 +461,28 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             <Mic size={20} strokeWidth={1.5} />
           </button>
 
-          <button className="hover:text-black transition-colors"><Smile size={20} strokeWidth={1.5} /></button>
-          <button className="hover:text-black transition-colors"><FolderOpen size={20} strokeWidth={1.5} /></button>
-          <button className="hover:text-black transition-colors"><Paperclip size={20} strokeWidth={1.5} /></button>
+          <button 
+             id="emoji-btn"
+             onClick={toggleEmojiPicker}
+             className={`hover:text-black transition-colors ${showEmojiPicker ? 'text-green-600' : ''}`}
+           >
+               <Smile size={20} strokeWidth={1.5} />
+           </button>
+          
+          {/* File Input Hidden */}
+          <input 
+             type="file" 
+             ref={fileInputRef} 
+             className="hidden" 
+             onChange={handleFileChange}
+          />
+          
+          <button onClick={handleFileUploadClick} className="hover:text-black transition-colors" title="发送文件">
+              <FolderOpen size={20} strokeWidth={1.5} />
+          </button>
+          <button onClick={handleFileUploadClick} className="hover:text-black transition-colors" title="发送图片">
+              <Paperclip size={20} strokeWidth={1.5} />
+          </button>
         </div>
         
         {/* Input Section */}

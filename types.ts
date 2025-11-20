@@ -4,12 +4,13 @@ export enum MessageType {
   TEXT = 'TEXT',
   IMAGE = 'IMAGE',
   AUDIO = 'AUDIO',
+  FILE = 'FILE',
   SYSTEM = 'SYSTEM'
 }
 
 export interface Message {
   id: string;
-  content: string; // Text content or Base64 data URI for audio/image
+  content: string; // Text content or Base64 data URI
   senderId: string; // 'me' or contactId
   senderName?: string; // For group chats
   timestamp: number;
@@ -17,6 +18,8 @@ export interface Message {
   audioDuration?: number; // Duration in seconds for audio messages
   status?: MessageStatus;
   transcription?: string; // For voice-to-text
+  fileName?: string; // For FILE or IMAGE types
+  fileSize?: string; // Human readable string e.g. "2.5 MB"
 }
 
 export interface Contact {
@@ -27,6 +30,8 @@ export interface Contact {
   lastMessageTime?: number;
   isAi: boolean; // To trigger Gemini
   isGroup?: boolean; // For group chat logic
+  hasAiActive?: boolean; // If AI is enabled in this group
+  members?: User[]; // For group chats
 }
 
 export interface User {
