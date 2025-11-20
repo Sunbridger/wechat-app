@@ -1,5 +1,5 @@
-import React from 'react';
-import { MessageCircle, Users, Folder, Search, Plus } from 'lucide-react';
+import React, { useState } from 'react';
+import { MessageCircle, Users, Folder, Search, Plus, UserPlus, Users as UsersIcon, Tag } from 'lucide-react';
 import { Contact } from '../types';
 
 export type TabType = 'chat' | 'contacts' | 'files';
@@ -10,6 +10,7 @@ interface SidebarProps {
   onSelectContact: (id: string) => void;
   currentTab: TabType;
   onTabChange: (tab: TabType) => void;
+  onAddContact?: (name: string) => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -17,8 +18,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   activeContactId, 
   onSelectContact,
   currentTab,
-  onTabChange
+  onTabChange,
+  onAddContact
 }) => {
+  const [menuOpen, setMenuOpen] = useState(false);
   
   const formatTime = (timestamp?: number) => {
     if (!timestamp) return '';
@@ -31,6 +34,14 @@ const Sidebar: React.FC<SidebarProps> = ({
     } else {
         return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
     }
+  };
+
+  const handleAddClick = () => {
+    const name = prompt("请输入好友名称：");
+    if (name && name.trim() && onAddContact) {
+        onAddContact(name.trim());
+    }
+    setMenuOpen(false);
   };
 
   // Filter logic based on tab
@@ -70,12 +81,44 @@ const Sidebar: React.FC<SidebarProps> = ({
       const sortedContacts = [...contacts].sort((a, b) => a.name.localeCompare(b.name));
       return (
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-            <div className="px-4 py-2 text-xs text-gray-400">通讯录</div>
+            {/* Function Keys */}
+            <div className="mt-2 mb-2">
+                <div 
+                    onClick={handleAddClick}
+                    className="flex items-center px-3 py-2.5 cursor-pointer hover:bg-[#dcdcdc]"
+                >
+                    <div className="w-9 h-9 rounded-md bg-[#fa9d3b] flex items-center justify-center text-white">
+                        <UserPlus size={20} fill="white" />
+                    </div>
+                    <div className="ml-3 flex-1 min-w-0 border-b border-[#e7e7e7] pb-2.5 flex items-center">
+                         <h3 className="text-[14px] font-normal text-black">新的朋友</h3>
+                    </div>
+                </div>
+                <div className="flex items-center px-3 py-2.5 cursor-pointer hover:bg-[#dcdcdc]">
+                    <div className="w-9 h-9 rounded-md bg-[#07c160] flex items-center justify-center text-white">
+                        <UsersIcon size={20} fill="white" />
+                    </div>
+                    <div className="ml-3 flex-1 min-w-0 border-b border-[#e7e7e7] pb-2.5 flex items-center">
+                         <h3 className="text-[14px] font-normal text-black">群聊</h3>
+                    </div>
+                </div>
+                <div className="flex items-center px-3 py-2.5 cursor-pointer hover:bg-[#dcdcdc]">
+                    <div className="w-9 h-9 rounded-md bg-[#2782d7] flex items-center justify-center text-white">
+                        <Tag size={20} fill="white" />
+                    </div>
+                    <div className="ml-3 flex-1 min-w-0 pb-2.5 flex items-center">
+                         <h3 className="text-[14px] font-normal text-black">标签</h3>
+                    </div>
+                </div>
+            </div>
+
+            {/* Contact List */}
+            <div className="px-4 py-1 text-xs text-gray-400 bg-[#f7f7f7]">常用联系人</div>
              {sortedContacts.map((contact) => (
             <div 
               key={contact.id}
               onClick={() => onSelectContact(contact.id)} // Switch to chat when clicking contact
-              className="flex items-center p-3 cursor-pointer hover:bg-[#dcdcdc] border-b border-[#e7e7e7]"
+              className="flex items-center px-3 py-2.5 cursor-pointer hover:bg-[#dcdcdc] border-b border-[#e7e7e7]"
             >
               <img 
                 src={contact.avatar} 
@@ -137,7 +180,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       {/* List Area */}
       <div className="flex-1 flex flex-col bg-[#f7f7f7]">
         {/* Search Bar */}
-        <div className="h-16 flex items-center px-3 bg-[#f7f7f7] gap-2 flex-shrink-0">
+        <div className="h-16 flex items-center px-3 bg-[#f7f7f7] gap-2 flex-shrink-0 relative">
           <div className="flex-1 relative">
             <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
               <Search size={14} className="text-gray-400" />
@@ -148,9 +191,26 @@ const Sidebar: React.FC<SidebarProps> = ({
               className="w-full bg-[#e2e2e2] text-xs py-1.5 pl-8 pr-2 rounded-[4px] focus:outline-none border border-transparent focus:border-[#d1d1d1] text-gray-700 placeholder-gray-500"
             />
           </div>
-          <button className="bg-[#e2e2e2] p-1.5 rounded-[4px] text-gray-600 hover:bg-[#d1d1d1]">
+          <button 
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="bg-[#e2e2e2] p-1.5 rounded-[4px] text-gray-600 hover:bg-[#d1d1d1]"
+          >
             <Plus size={14} />
           </button>
+
+          {/* Header Dropdown */}
+          {menuOpen && (
+            <div className="absolute top-14 right-2 w-32 bg-[#2e2e2e] rounded-md shadow-lg py-1 z-50 animate-fade-in-up">
+                <button onClick={handleAddClick} className="w-full text-left px-4 py-2 text-white hover:bg-[#3e3e3e] text-sm flex items-center gap-2">
+                    <UserPlus size={16} />
+                    <span>添加朋友</span>
+                </button>
+                <button className="w-full text-left px-4 py-2 text-white hover:bg-[#3e3e3e] text-sm flex items-center gap-2">
+                    <MessageCircle size={16} />
+                    <span>发起群聊</span>
+                </button>
+            </div>
+          )}
         </div>
 
         {/* Dynamic Content */}

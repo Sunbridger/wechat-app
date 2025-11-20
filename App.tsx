@@ -114,6 +114,35 @@ const App: React.FC = () => {
       ));
   }, []);
 
+  const handleAddContact = useCallback((name: string) => {
+      const newId = `user_${Date.now()}`;
+      const newContact: Contact = {
+          id: newId,
+          name: name,
+          avatar: `https://picsum.photos/seed/${newId}/200`,
+          lastMessage: '我们已经是好友了，开始聊天吧',
+          lastMessageTime: Date.now(),
+          isAi: false
+      };
+
+      setContacts(prev => [...prev, newContact]);
+      
+      // Initialize chat with a system message
+      setMessagesMap(prev => ({
+          ...prev,
+          [newId]: [{
+              id: Date.now().toString(),
+              content: '我通过了你的朋友验证请求，现在我们可以开始聊天了',
+              senderId: 'system',
+              timestamp: Date.now(),
+              type: MessageType.SYSTEM
+          }]
+      }));
+
+      setActiveContactId(newId);
+      setCurrentTab('chat');
+  }, []);
+
   const handleAddMember = useCallback((contactId: string, name: string) => {
       // 1. Update Contact Members
       const newMemberId = `user_${Date.now()}`;
@@ -322,6 +351,7 @@ const App: React.FC = () => {
             onSelectContact={handleSelectContact}
             currentTab={currentTab}
             onTabChange={setCurrentTab}
+            onAddContact={handleAddContact}
           />
         </div>
 
