@@ -1,3 +1,4 @@
+
 export type MessageStatus = 'sending' | 'sent' | 'read';
 
 export enum MessageType {
@@ -55,4 +56,10 @@ export interface Moment {
   timestamp: number;
   likes: string[]; // array of names
   comments: Comment[];
+}
+
+export interface Sticker {
+  id: string;
+  url: string; // Base64 or URL
+  timestamp: number;
 }

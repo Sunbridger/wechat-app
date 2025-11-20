@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar, { TabType } from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
 import Moments from './components/Moments';
 import NewFriends from './components/NewFriends';
-import { Contact, Message, MessageType, User, Moment } from './types';
+import StickerManager from './components/StickerManager';
+import { Contact, Message, MessageType, User, Moment, Sticker } from './types';
 import { getGeminiReply, transcribeAudio } from './services/geminiService';
 
 // Mock Data
@@ -96,6 +98,12 @@ const INITIAL_MOMENTS: Moment[] = [
   }
 ];
 
+const INITIAL_STICKERS: Sticker[] = [
+    { id: 's1', url: 'https://picsum.photos/id/1025/200/200', timestamp: Date.now() },
+    { id: 's2', url: 'https://picsum.photos/id/1062/200/200', timestamp: Date.now() },
+    { id: 's3', url: 'https://picsum.photos/id/237/200/200', timestamp: Date.now() },
+];
+
 const App: React.FC = () => {
   // Load from localStorage or use initials
   const [contacts, setContacts] = useState<Contact[]>(() => {
@@ -109,6 +117,11 @@ const App: React.FC = () => {
   });
 
   const [moments, setMoments] = useState<Moment[]>(INITIAL_MOMENTS);
+  const [customStickers, setCustomStickers] = useState<Sticker[]>(() => {
+      const saved = localStorage.getItem('wechat_stickers');
+      return saved ? JSON.parse(saved) : INITIAL_STICKERS;
+  });
+
   const [activeContactId, setActiveContactId] = useState<string>('1');
   const [typingMap, setTypingMap] = useState<Record<string, boolean>>({});
   const [currentTab, setCurrentTab] = useState<TabType>('chat');
@@ -124,6 +137,10 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('wechat_messages', JSON.stringify(messagesMap));
   }, [messagesMap]);
+
+  useEffect(() => {
+    localStorage.setItem('wechat_stickers', JSON.stringify(customStickers));
+  }, [customStickers]);
 
   // Sort contacts by last message time
   useEffect(() => {
@@ -267,6 +284,29 @@ const App: React.FC = () => {
         }
         return m;
     }));
+  }, []);
+
+  // Sticker Handlers
+  const handleAddSticker = useCallback((base64: string) => {
+      const newSticker: Sticker = {
+          id: `s_${Date.now()}`,
+          url: base64,
+          timestamp: Date.now()
+      };
+      setCustomStickers(prev => [...prev, newSticker]);
+  }, []);
+
+  const handleDeleteSticker = useCallback((id: string) => {
+      setCustomStickers(prev => prev.filter(s => s.id !== id));
+  }, []);
+
+  const handleReorderStickers = useCallback((startIndex: number, endIndex: number) => {
+      setCustomStickers(prev => {
+          const result = Array.from(prev);
+          const [removed] = result.splice(startIndex, 1);
+          result.splice(endIndex, 0, removed);
+          return result;
+      });
   }, []);
 
   const handleSendMessage = useCallback(async (
@@ -454,6 +494,15 @@ const App: React.FC = () => {
             />
         </div>
       );
+  } else if (currentTab === 'stickers') {
+      mainContent = (
+          <StickerManager 
+            stickers={customStickers}
+            onAddSticker={handleAddSticker}
+            onDeleteSticker={handleDeleteSticker}
+            onReorderStickers={handleReorderStickers}
+          />
+      );
   } else if (activeContactId === 'new_friends') {
       mainContent = <NewFriends onAddContact={handleAddContact} />;
   } else if (activeContact) {
@@ -477,6 +526,7 @@ const App: React.FC = () => {
             onToggleGroupAi={toggleGroupAi}
             onAddMember={handleAddMember}
             isTyping={isTyping}
+            stickers={customStickers}
           />
         </div>
       );
@@ -496,7 +546,7 @@ const App: React.FC = () => {
       {/* Main App Container centered on screen like desktop app */}
       <div className="flex w-full h-full md:w-[1000px] md:h-[800px] md:rounded-lg overflow-hidden shadow-2xl bg-[#f5f5f5]">
         {/* Left Sidebar */}
-        <div className={`${(activeContactId || currentTab === 'moments') ? 'hidden md:flex' : 'flex'} w-full md:w-auto h-full`}>
+        <div className={`${(activeContactId || currentTab === 'moments' || currentTab === 'stickers') ? 'hidden md:flex' : 'flex'} w-full md:w-auto h-full`}>
           <Sidebar 
             contacts={contacts} 
             activeContactId={activeContactId} 
@@ -509,7 +559,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Right Content Area */}
-        <div className={`${(!activeContactId && currentTab !== 'moments') ? 'hidden md:flex' : 'flex'} flex-1 h-full`}>
+        <div className={`${(!activeContactId && currentTab !== 'moments' && currentTab !== 'stickers') ? 'hidden md:flex' : 'flex'} flex-1 h-full`}>
           {mainContent}
         </div>
       </div>

@@ -1,6 +1,7 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreHorizontal, Smile, Paperclip, FolderOpen, Trash2, Mic, Wifi, Loader2, FileText, Plus } from 'lucide-react';
-import { Contact, Message, MessageType } from '../types';
+import { MoreHorizontal, Smile, Paperclip, FolderOpen, Trash2, Mic, Wifi, Loader2, FileText, Plus, Heart } from 'lucide-react';
+import { Contact, Message, MessageType, Sticker } from '../types';
 
 interface ChatWindowProps {
   activeContact: Contact;
@@ -11,6 +12,7 @@ interface ChatWindowProps {
   onToggleGroupAi?: (contactId: string) => void;
   onAddMember?: (contactId: string, name: string) => void;
   isTyping: boolean;
+  stickers: Sticker[];
 }
 
 const EMOJIS = [
@@ -31,12 +33,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onDeleteMessage,
   onToggleGroupAi,
   onAddMember,
-  isTyping
+  isTyping,
+  stickers
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; messageId: string } | null>(null);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
   const [isRecording, setIsRecording] = useState(false);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
@@ -65,10 +69,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
        if (showEmojiPicker && !(e.target as HTMLElement).closest('#emoji-container')) {
            setShowEmojiPicker(false);
        }
+       if (showStickerPicker && !(e.target as HTMLElement).closest('#sticker-container')) {
+           setShowStickerPicker(false);
+       }
     };
     document.addEventListener('click', handleClick);
     return () => document.removeEventListener('click', handleClick);
-  }, [settingsMenuOpen, showEmojiPicker]);
+  }, [settingsMenuOpen, showEmojiPicker, showStickerPicker]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -83,6 +90,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       setInputValue('');
       setShowEmojiPicker(false);
     }
+  };
+
+  const handleSendSticker = (url: string) => {
+    onSendMessage(url, MessageType.IMAGE);
+    setShowStickerPicker(false);
   };
 
   const handleContextMenu = (e: React.MouseEvent, messageId: string) => {
@@ -166,6 +178,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const toggleEmojiPicker = (e: React.MouseEvent) => {
       e.stopPropagation();
       setShowEmojiPicker(!showEmojiPicker);
+      setShowStickerPicker(false);
+  };
+
+  const toggleStickerPicker = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setShowStickerPicker(!showStickerPicker);
+      setShowEmojiPicker(false);
   };
 
   const addEmoji = (emoji: string) => {
@@ -451,6 +470,30 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             </div>
         )}
 
+        {/* Sticker Picker Popup */}
+        {showStickerPicker && (
+            <div id="sticker-container" className="absolute bottom-[165px] left-14 bg-white border border-gray-200 shadow-lg rounded-lg p-4 w-80 h-64 overflow-y-auto custom-scrollbar z-50 animate-fade-in-up">
+                {stickers.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-gray-400 text-sm">
+                        <Heart size={24} className="mb-2" />
+                        <p>暂无收藏表情</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-4 gap-2">
+                        {stickers.map(sticker => (
+                            <button 
+                                key={sticker.id} 
+                                onClick={() => handleSendSticker(sticker.url)}
+                                className="hover:bg-gray-100 p-2 rounded transition-colors aspect-square flex items-center justify-center"
+                            >
+                                <img src={sticker.url} alt="sticker" className="max-w-full max-h-full object-contain" />
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+        )}
+
         {/* Toolbar */}
         <div className="h-10 flex items-center px-4 gap-4 text-[#5a5a5a]">
           <button 
@@ -465,8 +508,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
              id="emoji-btn"
              onClick={toggleEmojiPicker}
              className={`hover:text-black transition-colors ${showEmojiPicker ? 'text-green-600' : ''}`}
+             title="表情"
            >
                <Smile size={20} strokeWidth={1.5} />
+           </button>
+
+           <button 
+             id="sticker-btn"
+             onClick={toggleStickerPicker}
+             className={`hover:text-black transition-colors ${showStickerPicker ? 'text-green-600' : ''}`}
+             title="自定义表情"
+           >
+               <Heart size={20} strokeWidth={1.5} />
            </button>
           
           {/* File Input Hidden */}

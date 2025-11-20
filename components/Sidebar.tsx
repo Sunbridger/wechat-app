@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Users, Folder, Search, Plus, UserPlus, Users as UsersIcon, Tag, Aperture } from 'lucide-react';
+import { MessageCircle, Users, Folder, Search, Plus, UserPlus, Users as UsersIcon, Tag, Aperture, Smile } from 'lucide-react';
 import { Contact } from '../types';
 
-export type TabType = 'chat' | 'contacts' | 'moments' | 'files';
+export type TabType = 'chat' | 'contacts' | 'moments' | 'files' | 'stickers';
 
 interface SidebarProps {
   contacts: Contact[];
@@ -170,6 +171,21 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
             </div>
         );
+    } else if (currentTab === 'stickers') {
+        return (
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+                 <div className="mt-2 px-3 py-2.5 cursor-pointer bg-[#c6c6c6]">
+                    <div className="flex items-center">
+                         <div className="w-9 h-9 rounded-md bg-transparent flex items-center justify-center">
+                            <Smile size={24} className="text-gray-600" />
+                         </div>
+                         <div className="ml-3 flex-1 min-w-0 flex items-center">
+                            <h3 className="text-[14px] font-normal text-black">自定义表情</h3>
+                         </div>
+                    </div>
+                </div>
+            </div>
+        );
     } else {
         // Files / Favorites Tab
         return (
@@ -221,6 +237,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#fa5151] rounded-full border-2 border-[#2e2e2e]"></div>
             )}
           </div>
+
+          <button 
+            onClick={() => onTabChange('stickers')}
+            className={`transition-colors ${currentTab === 'stickers' ? 'text-[#07c160]' : 'hover:text-white'}`}
+            title="自定义表情"
+          >
+            <Smile size={24} strokeWidth={1.5} className={currentTab === 'stickers' ? 'text-[#07c160]' : ''} />
+          </button>
 
           <button 
             onClick={() => onTabChange('files')}
