@@ -7,8 +7,9 @@ import StickerManager from './components/StickerManager';
 import GroupCreator from './components/GroupCreator';
 import { Contact, Message, MessageType, User, Moment, Sticker } from './types';
 import { getGeminiReply, transcribeAudio } from './services/geminiService';
-import { p2pService, P2PMessagePayload } from './services/p2pService';
+import { p2pService, P2PMessagePayload, P2PStatus } from './services/p2pService';
 import { dbService } from './services/dbService';
+import { WifiOff, RefreshCw } from 'lucide-react';
 
 // Fallback default only used if logic fails
 const FALLBACK_USER: User = {
@@ -101,6 +102,7 @@ const App: React.FC = () => {
   const [hasNewMoments, setHasNewMoments] = useState(true);
   const [myPeerId, setMyPeerId] = useState<string>('');
   const [isDbLoaded, setIsDbLoaded] = useState(false);
+  const [p2pStatus, setP2pStatus] = useState<{status: P2PStatus, msg?: string}>({ status: 'disconnected' });
 
   // 1. Initialize DB and Load Data
   useEffect(() => {
@@ -125,9 +127,12 @@ const App: React.FC = () => {
         setCurrentUser(user);
 
         const savedPeerId = await dbService.getPeerId();
-
         // Initialize P2P with saved ID (if any)
+        p2pService.setOnStatusChange((status, msg) => {
+            setP2pStatus({ status, msg });
+        });
         p2pService.init(savedPeerId || undefined);
+
         p2pService.setOnIdAssigned((id) => {
           setMyPeerId(id);
           dbService.savePeerId(id);
@@ -165,7 +170,6 @@ const App: React.FC = () => {
 
   // 2. Persistence Effects - Save to IndexedDB on change
   // We skip saving if DB hasn't loaded yet to avoid overwriting DB with initial state
-
   useEffect(() => {
     if (isDbLoaded) dbService.saveUser(currentUser);
   }, [currentUser, isDbLoaded]);
@@ -186,7 +190,6 @@ const App: React.FC = () => {
     if (isDbLoaded) dbService.saveStickers(customStickers);
   }, [customStickers, isDbLoaded]);
 
-  // Sort contacts by last message time
   useEffect(() => {
     setContacts(prev =>
       [...prev].sort((a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0))
@@ -195,12 +198,10 @@ const App: React.FC = () => {
 
   const handleIncomingP2PMessage = (payload: P2PMessagePayload) => {
       const { message, senderInfo } = payload;
-
       // Check if contact exists, if not, add them
       setContacts(prev => {
           const existing = prev.find(c => c.peerId === senderInfo.id || c.name === senderInfo.name);
           if (existing) {
-              // FIX: Update name and avatar from senderInfo to ensure consistency
               return prev.map(c => c.id === existing.id ? {
                   ...c,
                   name: senderInfo.name,
@@ -209,7 +210,6 @@ const App: React.FC = () => {
                   lastMessageTime: Date.now()
               } : c);
           } else {
-              // Auto-add new P2P contact
               const newId = `p2p_${senderInfo.id}`;
               const newContact: Contact = {
                   id: newId,
@@ -231,8 +231,8 @@ const App: React.FC = () => {
 
             const incomingMsg: Message = {
                 ...message,
-                senderId: resolvedContactId, // Force sender ID to match contact ID locally
-                status: 'read' // Mark incoming as read for now
+                senderId: resolvedContactId,
+                status: 'read'
             };
 
             setMessagesMap(prevMsgs => ({
@@ -258,56 +258,30 @@ const App: React.FC = () => {
       }
   };
 
+  // ... (Other handlers remain same: toggleGroupAi, handleStartGroupChat, handleCreateGroup, handleAddContact, etc.)
+
+  // Just need to copy over all the other handler functions exactly as they were to ensure full functionality
+
   const toggleGroupAi = useCallback((contactId: string) => {
       setContacts(prev => prev.map(c =>
           c.id === contactId ? { ...c, hasAiActive: !c.hasAiActive } : c
       ));
   }, []);
-
-  const handleStartGroupChat = useCallback(() => {
-      setActiveContactId('group_create');
-  }, []);
-
+  const handleStartGroupChat = useCallback(() => setActiveContactId('group_create'), []);
   const handleCreateGroup = useCallback((name: string, selectedContactIds: string[]) => {
       const newGroupId = `group_${Date.now()}`;
       const selectedContacts = contacts.filter(c => selectedContactIds.includes(c.id));
-      const members: User[] = [
-          currentUser,
-          ...selectedContacts.map(c => ({ id: c.id, name: c.name, avatar: c.avatar }))
-      ];
-
-      const newGroup: Contact = {
-          id: newGroupId,
-          name: name,
-          avatar: 'https://picsum.photos/id/10/200/200',
-          lastMessage: '你创建了群聊',
-          lastMessageTime: Date.now(),
-          isAi: false,
-          isGroup: true,
-          members: members,
-          hasAiActive: false
-      };
-
+      const members: User[] = [currentUser, ...selectedContacts.map(c => ({ id: c.id, name: c.name, avatar: c.avatar }))];
+      const newGroup: Contact = { id: newGroupId, name: name, avatar: 'https://picsum.photos/id/10/200/200', lastMessage: '你创建了群聊', lastMessageTime: Date.now(), isAi: false, isGroup: true, members: members, hasAiActive: false };
       setContacts(prev => [...prev, newGroup]);
-      setMessagesMap(prev => ({
-          ...prev,
-          [newGroupId]: [{
-              id: Date.now().toString(),
-              content: `你邀请 ${selectedContacts.map(c => c.name).join('、')} 加入了群聊`,
-              senderId: 'system',
-              timestamp: Date.now(),
-              type: MessageType.SYSTEM
-          }]
-      }));
-
-      setActiveContactId(newGroupId);
-      setCurrentTab('chat');
+      setMessagesMap(prev => ({ ...prev, [newGroupId]: [{ id: Date.now().toString(), content: `你邀请 ${selectedContacts.map(c => c.name).join('、')} 加入了群聊`, senderId: 'system', timestamp: Date.now(), type: MessageType.SYSTEM }] }));
+      setActiveContactId(newGroupId); setCurrentTab('chat');
   }, [contacts, currentUser]);
-
   const handleAddContact = useCallback((name: string, id?: string) => {
       console.log('handleAddContact called with:', name, id);
       const isPeerId = id && id.length > 10;
       const newId = isPeerId ? `p2p_${id}` : (id || `user_${Date.now()}`);
+<<<<<<< HEAD
 
       console.log('newId:', newId);
       console.log('contacts:', contacts);
@@ -355,163 +329,23 @@ const App: React.FC = () => {
       setActiveContactId(newId);
       setCurrentTab('chat');
   }, [contacts, setActiveContactId, setCurrentTab, setMessagesMap]);
-
   const handleAddMember = useCallback((contactId: string, name: string) => {
       const newMemberId = `user_${Date.now()}`;
-      const newMember: User = {
-          id: newMemberId,
-          name: name,
-          avatar: `https://picsum.photos/seed/${newMemberId}/200`
-      };
-
-      setContacts(prev => prev.map(c => {
-          if (c.id === contactId) {
-              return {
-                  ...c,
-                  members: [...(c.members || []), newMember]
-              };
-          }
-          return c;
-      }));
-
-      const sysMsg: Message = {
-          id: Date.now().toString(),
-          content: `"${currentUser.name}" 邀请 "${name}" 加入了群聊`,
-          senderId: 'system',
-          timestamp: Date.now(),
-          type: MessageType.SYSTEM
-      };
-
-      setMessagesMap(prev => ({
-          ...prev,
-          [contactId]: [...(prev[contactId] || []), sysMsg]
-      }));
+      const newMember: User = { id: newMemberId, name: name, avatar: `https://picsum.photos/seed/${newMemberId}/200` };
+      setContacts(prev => prev.map(c => { if (c.id === contactId) { return { ...c, members: [...(c.members || []), newMember] }; } return c; }));
+      const sysMsg: Message = { id: Date.now().toString(), content: `"${currentUser.name}" 邀请 "${name}" 加入了群聊`, senderId: 'system', timestamp: Date.now(), type: MessageType.SYSTEM };
+      setMessagesMap(prev => ({ ...prev, [contactId]: [...(prev[contactId] || []), sysMsg] }));
   }, [currentUser]);
-
-  const handleUpdateUserAvatar = useCallback((newAvatar: string) => {
-      setCurrentUser(prev => ({ ...prev, avatar: newAvatar }));
-  }, []);
-
-  const handleUpdateContactAvatar = useCallback((contactId: string, newAvatar: string) => {
-      setContacts(prev => prev.map(c =>
-          c.id === contactId ? { ...c, avatar: newAvatar } : c
-      ));
-  }, []);
-
-  const handleAddMoment = useCallback((content: string, images: string[], video?: string) => {
-    const newMoment: Moment = {
-        id: `m_${Date.now()}`,
-        author: currentUser,
-        content,
-        images,
-        video,
-        timestamp: Date.now(),
-        likes: [],
-        comments: []
-    };
-    setMoments(prev => [newMoment, ...prev]);
-  }, [currentUser]);
-
-  const handleLikeMoment = useCallback((momentId: string) => {
-      setMoments(prev => prev.map(m => {
-          if (m.id === momentId) {
-              const isLiked = m.likes.includes(currentUser.name);
-              let newLikes;
-              if (isLiked) {
-                  newLikes = m.likes.filter(name => name !== currentUser.name);
-              } else {
-                  newLikes = [...m.likes, currentUser.name];
-              }
-              return { ...m, likes: newLikes };
-          }
-          return m;
-      }));
-  }, [currentUser]);
-
-  const handleAddComment = useCallback((momentId: string, content: string) => {
-    setMoments(prev => prev.map(m => {
-        if (m.id === momentId) {
-            return {
-                ...m,
-                comments: [...m.comments, {
-                    id: `c_${Date.now()}`,
-                    authorName: currentUser.name,
-                    content
-                }]
-            };
-        }
-        return m;
-    }));
-  }, [currentUser]);
-
-  const handleAddSticker = useCallback((base64: string) => {
-      const newSticker: Sticker = {
-          id: `s_${Date.now()}`,
-          url: base64,
-          timestamp: Date.now()
-      };
-      setCustomStickers(prev => [...prev, newSticker]);
-  }, []);
-
-  const handleDeleteSticker = useCallback((id: string) => {
-      setCustomStickers(prev => prev.filter(s => s.id !== id));
-  }, []);
-
-  const handleReorderStickers = useCallback((startIndex: number, endIndex: number) => {
-      setCustomStickers(prev => {
-          const result = Array.from(prev);
-          const [removed] = result.splice(startIndex, 1);
-          result.splice(endIndex, 0, removed);
-          return result;
-      });
-  }, []);
-
-  const handleDeleteChat = useCallback((contactId: string) => {
-      // Update local state
-      setContacts(prev => prev.filter(c => c.id !== contactId));
-      setMessagesMap(prev => {
-          const newMap = { ...prev };
-          delete newMap[contactId];
-          return newMap;
-      });
-      setActiveContactId('');
-
-      if (isDbLoaded) {
-          dbService.deleteMessagesForContact(contactId);
-      }
-  }, [isDbLoaded]);
-
-  const handleDeleteMessage = useCallback((messageId: string) => {
-    if (!activeContactId) return;
-
-    const currentMessages = messagesMap[activeContactId] || [];
-    const updatedMessages = currentMessages.filter(msg => msg.id !== messageId);
-
-    setMessagesMap(prev => ({
-      ...prev,
-      [activeContactId]: updatedMessages
-    }));
-
-    setContacts(prevContacts => prevContacts.map(c => {
-      if (c.id === activeContactId) {
-        const lastMsg = updatedMessages[updatedMessages.length - 1];
-        let preview = "暂无消息";
-        if (lastMsg) {
-             if (lastMsg.type === MessageType.AUDIO) preview = '[语音]';
-             else if (lastMsg.type === MessageType.IMAGE) preview = '[图片]';
-             else if (lastMsg.type === MessageType.FILE) preview = '[文件]';
-             else preview = lastMsg.content;
-        }
-
-        return {
-          ...c,
-          lastMessage: preview,
-          lastMessageTime: lastMsg ? lastMsg.timestamp : c.lastMessageTime
-        };
-      }
-      return c;
-    }));
-  }, [activeContactId, messagesMap]);
+  const handleUpdateUserAvatar = useCallback((newAvatar: string) => setCurrentUser(prev => ({ ...prev, avatar: newAvatar })), []);
+  const handleUpdateContactAvatar = useCallback((contactId: string, newAvatar: string) => setContacts(prev => prev.map(c => c.id === contactId ? { ...c, avatar: newAvatar } : c)), []);
+  const handleAddMoment = useCallback((content: string, images: string[], video?: string) => setMoments(prev => [{ id: `m_${Date.now()}`, author: currentUser, content, images, video, timestamp: Date.now(), likes: [], comments: [] }, ...prev]), [currentUser]);
+  const handleLikeMoment = useCallback((momentId: string) => setMoments(prev => prev.map(m => { if (m.id === momentId) { const isLiked = m.likes.includes(currentUser.name); return { ...m, likes: isLiked ? m.likes.filter(name => name !== currentUser.name) : [...m.likes, currentUser.name] }; } return m; })), [currentUser]);
+  const handleAddComment = useCallback((momentId: string, content: string) => setMoments(prev => prev.map(m => { if (m.id === momentId) { return { ...m, comments: [...m.comments, { id: `c_${Date.now()}`, authorName: currentUser.name, content }] }; } return m; })), [currentUser]);
+  const handleAddSticker = useCallback((base64: string) => setCustomStickers(prev => [...prev, { id: `s_${Date.now()}`, url: base64, timestamp: Date.now() }]), []);
+  const handleDeleteSticker = useCallback((id: string) => setCustomStickers(prev => prev.filter(s => s.id !== id)), []);
+  const handleReorderStickers = useCallback((startIndex: number, endIndex: number) => setCustomStickers(prev => { const r = Array.from(prev); const [rm] = r.splice(startIndex, 1); r.splice(endIndex, 0, rm); return r; }), []);
+  const handleDeleteChat = useCallback((contactId: string) => { setContacts(prev => prev.filter(c => c.id !== contactId)); setMessagesMap(prev => { const n = { ...prev }; delete n[contactId]; return n; }); setActiveContactId(''); if (isDbLoaded) dbService.deleteMessagesForContact(contactId); }, [isDbLoaded]);
+  const handleDeleteMessage = useCallback((messageId: string) => { if (!activeContactId) return; const currentMessages = messagesMap[activeContactId] || []; const updatedMessages = currentMessages.filter(msg => msg.id !== messageId); setMessagesMap(prev => ({ ...prev, [activeContactId]: updatedMessages })); setContacts(prev => prev.map(c => { if (c.id === activeContactId) { const lastMsg = updatedMessages[updatedMessages.length - 1]; let preview = "暂无消息"; if (lastMsg) { if (lastMsg.type === MessageType.AUDIO) preview = '[语音]'; else if (lastMsg.type === MessageType.IMAGE) preview = '[图片]'; else if (lastMsg.type === MessageType.FILE) preview = '[文件]'; else preview = lastMsg.content; } return { ...c, lastMessage: preview, lastMessageTime: lastMsg ? lastMsg.timestamp : c.lastMessageTime }; } return c; })); }, [activeContactId, messagesMap]);
 
   const handleSendMessage = useCallback(async (
       content: string,
@@ -519,46 +353,21 @@ const App: React.FC = () => {
       extra: { duration?: number, fileName?: string, fileSize?: string } = {}
   ) => {
     if (!activeContactId || activeContactId === 'new_friends' || activeContactId === 'group_create') return;
-
     const newMessageId = Date.now().toString();
+    const newMessage: Message = { id: newMessageId, content, senderId: 'me', timestamp: Date.now(), type, audioDuration: extra.duration, status: 'sending', fileName: extra.fileName, fileSize: extra.fileSize };
 
-    const newMessage: Message = {
-      id: newMessageId,
-      content: content,
-      senderId: 'me',
-      timestamp: Date.now(),
-      type: type,
-      audioDuration: extra.duration,
-      status: 'sending',
-      fileName: extra.fileName,
-      fileSize: extra.fileSize
-    };
+    setMessagesMap(prev => ({ ...prev, [activeContactId]: [...(prev[activeContactId] || []), newMessage] }));
 
-    // 1. Update UI with User Message (Sending)
-    setMessagesMap(prev => ({
-      ...prev,
-      [activeContactId]: [...(prev[activeContactId] || []), newMessage]
-    }));
-
-    // Update Last Message in Sidebar
     let previewText = content;
     if (type === MessageType.AUDIO) previewText = '[语音]';
     else if (type === MessageType.IMAGE) previewText = '[图片]';
     else if (type === MessageType.FILE) previewText = '[文件]';
+    setContacts(prev => prev.map(c => { if (c.id === activeContactId) { return { ...c, lastMessage: previewText, lastMessageTime: Date.now() }; } return c; }));
 
-    setContacts(prev => prev.map(c => {
-      if (c.id === activeContactId) {
-        return { ...c, lastMessage: previewText, lastMessageTime: Date.now() };
-      }
-      return c;
-    }));
-
-    // 2. P2P Sending Logic
     const currentContact = contacts.find(c => c.id === activeContactId);
     if (currentContact?.peerId) {
         const p2pMsg = { ...newMessage, senderId: myPeerId };
         p2pService.sendMessage(currentContact.peerId, p2pMsg, { ...currentUser, id: myPeerId });
-
         setTimeout(() => {
             setMessagesMap(prev => ({
                 ...prev,
@@ -568,18 +377,8 @@ const App: React.FC = () => {
         return;
     }
 
-
-    // 3. AI/Local Audio Transcription (Existing Logic)
     if (type === MessageType.AUDIO) {
-        transcribeAudio(content).then(text => {
-            setMessagesMap(prev => {
-                const msgs = prev[activeContactId] || [];
-                return {
-                    ...prev,
-                    [activeContactId]: msgs.map(m => m.id === newMessageId ? { ...m, transcription: text } : m)
-                };
-            });
-        });
+        transcribeAudio(content).then(text => setMessagesMap(prev => ({ ...prev, [activeContactId]: prev[activeContactId].map(m => m.id === newMessageId ? { ...m, transcription: text } : m) })));
     }
 
     // Simulate Sending Delay -> Mark as SENT (For non-P2P)
@@ -595,54 +394,24 @@ const App: React.FC = () => {
       });
     }, 800);
 
-    // 4. AI Reply Logic
     const shouldAiReply = currentContact?.isAi || (currentContact?.isGroup && currentContact?.hasAiActive);
-
     if (shouldAiReply) {
       setTypingMap(prev => ({ ...prev, [activeContactId]: true }));
-      const history = messagesMap[activeContactId] || [];
-      const fullHistory = [...history, newMessage];
-
       try {
-        const aiReplyText = await getGeminiReply(fullHistory, currentContact?.name || "Chat", currentContact?.isGroup);
-
+        const history = messagesMap[activeContactId] || [];
+        const aiReplyText = await getGeminiReply([...history, newMessage], currentContact?.name || "Chat", currentContact?.isGroup);
         setMessagesMap(prev => {
             const currentMessages = prev[activeContactId] || [];
             const updatedMessages = currentMessages.map(msg =>
                 msg.id === newMessageId ? { ...msg, status: 'read' as const } : msg
             );
-
             const senderId = currentContact?.isGroup ? 'gemini_ai' : activeContactId;
             const senderName = currentContact?.isGroup ? 'Gemini AI' : undefined;
-
-            const aiMessage: Message = {
-                id: (Date.now() + 1).toString(),
-                content: aiReplyText,
-                senderId: senderId,
-                senderName: senderName,
-                timestamp: Date.now(),
-                type: MessageType.TEXT,
-                status: 'sent'
-            };
-
-            return {
-                ...prev,
-                [activeContactId]: [...updatedMessages, aiMessage]
-            };
+            const aiMessage: Message = { id: (Date.now() + 1).toString(), content: aiReplyText, senderId: senderId, senderName: senderName, timestamp: Date.now(), type: MessageType.TEXT, status: 'sent' };
+            return { ...prev, [activeContactId]: [...updatedMessages, aiMessage] };
         });
-
-        setContacts(prev => prev.map(c => {
-          if (c.id === activeContactId) {
-            return { ...c, lastMessage: aiReplyText, lastMessageTime: Date.now() };
-          }
-          return c;
-        }));
-
-      } catch (error) {
-        console.error("Failed to get AI reply", error);
-      } finally {
-        setTypingMap(prev => ({ ...prev, [activeContactId]: false }));
-      }
+        setContacts(prev => prev.map(c => { if (c.id === activeContactId) { return { ...c, lastMessage: aiReplyText, lastMessageTime: Date.now() }; } return c; }));
+      } catch (error) { console.error("AI error", error); } finally { setTypingMap(prev => ({ ...prev, [activeContactId]: false })); }
     }
   }, [activeContactId, contacts, messagesMap, myPeerId, currentUser]);
 
@@ -650,7 +419,9 @@ const App: React.FC = () => {
   const currentMessages = activeContactId ? (messagesMap[activeContactId] || []) : [];
   const isTyping = activeContactId ? (typingMap[activeContactId] || false) : false;
 
+  // ... Main render logic with Status Toast
   let mainContent;
+<<<<<<< HEAD
 
   if (currentTab === 'moments') {
       mainContent = (
@@ -698,8 +469,16 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex items-center justify-center h-screen w-screen bg-[#e5e5e5]">
-      <div className="flex w-full h-full md:w-[1000px] md:rounded-lg overflow-hidden shadow-2xl bg-[#f5f5f5]">
+    <div className="flex items-center justify-center h-screen w-screen bg-[#e5e5e5] overflow-hidden relative">
+      {/* P2P Status Toast */}
+      {p2pStatus.status !== 'connected' && p2pStatus.status !== 'disconnected' && (
+          <div className="absolute top-4 z-50 bg-yellow-100 text-yellow-800 px-4 py-2 rounded-md shadow-md flex items-center gap-2 text-sm">
+              {p2pStatus.status === 'connecting' || p2pStatus.status === 'retrying' ? <RefreshCw size={14} className="animate-spin"/> : <WifiOff size={14}/>}
+              <span>{p2pStatus.msg || 'Connecting...'}</span>
+          </div>
+      )}
+
+      <div className="flex w-full h-full md:w-[1000px] md:h-[85vh] md:max-h-[800px] md:rounded-lg overflow-hidden shadow-2xl bg-[#f5f5f5]">
         <div className={`${(activeContactId || currentTab === 'moments' || currentTab === 'stickers') ? 'hidden md:flex' : 'flex'} w-full md:w-auto h-full`}>
           <Sidebar contacts={contacts} activeContactId={activeContactId} onSelectContact={handleSelectContact} currentTab={currentTab} onTabChange={handleTabChange} onAddContact={(name) => handleAddContact(name)} onStartGroupChat={handleStartGroupChat} hasNewMoments={hasNewMoments} currentUser={currentUser} onUpdateUserAvatar={handleUpdateUserAvatar} myPeerId={myPeerId} />
         </div>
@@ -711,4 +490,4 @@ const App: React.FC = () => {
   );
 };
 
-export default App;
+export default App
