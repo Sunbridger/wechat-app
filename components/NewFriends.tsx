@@ -34,7 +34,9 @@ const NewFriends: React.FC<NewFriendsProps> = ({ onAddContact }) => {
   };
 
   const handleAdd = () => {
+    console.log('handleAdd called, searchResult:', searchResult);
     if (searchResult) {
+      console.log('calling onAddContact with:', searchResult.name, searchResult.id);
       onAddContact(searchResult.name, searchResult.id);
       setSearchTerm('');
       setSearchResult(null);

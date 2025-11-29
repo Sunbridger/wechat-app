@@ -32,9 +32,11 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showCopyTooltip, setShowCopyTooltip] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const copyButtonRef = useRef<HTMLButtonElement>(null);
   
   const formatTime = (timestamp?: number) => {
     if (!timestamp) return '';
@@ -252,7 +254,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       <div className="w-[60px] bg-[#2e2e2e] flex flex-col items-center py-4 flex-shrink-0 text-[#969696]">
         <div className="relative group cursor-pointer" onClick={() => avatarInputRef.current?.click()} title="点击修改头像">
              <img 
-                src={currentUser?.avatar || "https://picsum.photos/id/64/200/200"} 
+                src={currentUser?.avatar || "https://picsum.photos/id/1/200/200"} 
                 alt="我" 
                 className="w-9 h-9 rounded-md mb-6 border border-[#4a4a4a] object-cover group-hover:opacity-80 transition-opacity"
              />
@@ -328,11 +330,24 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         {/* My ID Display (Only in Contacts tab) */}
         {currentTab === 'contacts' && myPeerId && (
-            <div className="px-3 py-2 bg-[#f0f0f0] text-xs text-gray-500 flex justify-between items-center border-b border-gray-200">
+            <div className="px-3 py-2 bg-[#f0f0f0] text-xs text-gray-500 flex justify-between items-center border-b border-gray-200 relative">
                 <span className="truncate">我的微信号: {myPeerId}</span>
-                <button onClick={copyPeerId} className="text-[#576b95] hover:text-[#07c160] flex items-center gap-1">
-                    <Copy size={12} /> 复制
-                </button>
+                <div className="relative">
+                    <button 
+                        ref={copyButtonRef}
+                        onClick={copyPeerId} 
+                        className="text-[#576b95] hover:text-[#07c160] p-1"
+                        onMouseEnter={() => setShowCopyTooltip(true)}
+                        onMouseLeave={() => setShowCopyTooltip(false)}
+                    >
+                        <Copy size={12} />
+                    </button>
+                    {showCopyTooltip && (
+                        <div className="absolute right-0 -top-8 bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-md whitespace-nowrap">
+                            复制微信号
+                        </div>
+                    )}
+                </div>
             </div>
         )}
 

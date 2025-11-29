@@ -14,22 +14,23 @@ interface ChatWindowProps {
   onDeleteChat?: (contactId: string) => void;
   isTyping: boolean;
   stickers: Sticker[];
+  onBack?: () => void;
 }
 
 const EMOJIS = [
-  "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "🥲", "☺️", 
-  "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", 
-  "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", 
-  "😎", "🥸", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", 
-  "🙁", "☹️", "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤", 
+  "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "🥲", "☺️",
+  "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗",
+  "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓",
+  "😎", "🥸", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕",
+  "🙁", "☹️", "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤",
   "😠", "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰",
   "👍", "👎", "👊", "👌", "🤝", "🙏", "👋", "❤️", "💔", "🎉"
 ];
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ 
-  activeContact, 
-  messages, 
-  currentUserAvatar, 
+const ChatWindow: React.FC<ChatWindowProps> = ({
+  activeContact,
+  messages,
+  currentUserAvatar,
   onSendMessage,
   onDeleteMessage,
   onToggleGroupAi,
@@ -37,7 +38,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onUpdateContactAvatar,
   onDeleteChat,
   isTyping,
-  stickers
+  stickers,
+  onBack
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; messageId: string } | null>(null);
@@ -47,11 +49,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
   const [isRecording, setIsRecording] = useState(false);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
-  
+
   // Search State
   const [isSearching, setIsSearching] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -59,7 +61,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const groupAvatarInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  
+
   // Audio Ref to ensure single playback
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -162,7 +164,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       mediaRecorder.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const duration = Math.round((Date.now() - startTimeRef.current) / 1000);
-        
+
         if (duration < 1) {
           console.log("Recording too short");
           return;
@@ -174,7 +176,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           const base64data = reader.result as string;
           onSendMessage(base64data, MessageType.AUDIO, { duration });
         };
-        
+
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -263,7 +265,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       reader.onload = () => {
           const base64 = reader.result as string;
           const isImage = file.type.startsWith('image/');
-          
+
           // Format file size
           let sizeStr = '';
           if (file.size < 1024) sizeStr = `${file.size} B`;
@@ -271,13 +273,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           else sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
 
           onSendMessage(
-              base64, 
-              isImage ? MessageType.IMAGE : MessageType.FILE, 
+              base64,
+              isImage ? MessageType.IMAGE : MessageType.FILE,
               { fileName: file.name, fileSize: sizeStr }
           );
       };
       reader.readAsDataURL(file);
-      
+
       // Reset input
       if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -319,11 +321,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   // Helper for search highlighting
   const getHighlightedText = (text: string, highlight: string) => {
       if (!highlight.trim()) return <span>{text}</span>;
-      
+
       const parts = text.split(new RegExp(`(${highlight})`, 'gi'));
       return (
           <span>
-              {parts.map((part, i) => 
+              {parts.map((part, i) =>
                   part.toLowerCase() === highlight.toLowerCase() ? (
                       <span key={i} className="text-[#07c160] font-bold">{part}</span>
                   ) : (
@@ -334,7 +336,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       );
   };
 
-  const filteredMessages = isSearching 
+  const filteredMessages = isSearching
       ? messages.filter(m => {
           if (m.type === MessageType.TEXT) {
               return m.content.toLowerCase().includes(searchTerm.toLowerCase());
@@ -359,7 +361,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <Search size={16} className="text-gray-400" />
                     </div>
-                    <input 
+                    <input
                         ref={searchInputRef}
                         type="text"
                         value={searchTerm}
@@ -375,7 +377,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                          </button>
                     )}
                 </div>
-                <button 
+                <button
                     onClick={() => setIsSearching(false)}
                     className="text-sm text-gray-600 hover:text-black px-2"
                 >
@@ -384,9 +386,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             </div>
         ) : (
             <>
-                <div className="font-medium text-[16px] text-black select-none flex items-center gap-2">
-                    {activeContact.name}
-                    {activeContact.isGroup && <span className="text-xs text-gray-400">({activeContact.members?.length || 1})</span>}
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={onBack}
+                        className="text-gray-600 hover:text-black p-2"
+                    >
+                        ←
+                    </button>
+                    <div className="font-medium text-[16px] text-black select-none flex items-center gap-2">
+                        {activeContact.name}
+                        {activeContact.isGroup && <span className="text-xs text-gray-400">({activeContact.members?.length || 1})</span>}
+                    </div>
                 </div>
                 <div id="settings-container" className="relative">
                     <button onClick={toggleSettings} className="text-gray-600 hover:text-black p-1 rounded hover:bg-gray-200 transition-colors">
@@ -404,7 +414,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                                                 <span className="text-[10px] text-gray-500 mt-1 truncate w-full text-center">{member.name}</span>
                                             </div>
                                         ))}
-                                        <button 
+                                        <button
                                             onClick={handleAddMemberClick}
                                             className="w-10 h-10 border border-dashed border-gray-300 rounded-[4px] flex items-center justify-center hover:bg-gray-50 text-gray-400"
                                         >
@@ -424,29 +434,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                                                 <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform transform ${activeContact.hasAiActive ? 'left-[18px]' : 'left-0.5'}`}></div>
                                             </div>
                                         </div>
-                                        <div 
+                                        <div
                                             className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer flex items-center justify-between"
                                             onClick={() => groupAvatarInputRef.current?.click()}
                                         >
                                             <span>修改群头像</span>
                                             <ImageIcon size={14} className="text-gray-400"/>
                                         </div>
-                                        <input 
-                                            type="file" 
-                                            ref={groupAvatarInputRef} 
+                                        <input
+                                            type="file"
+                                            ref={groupAvatarInputRef}
                                             className="hidden"
-                                            accept="image/*" 
+                                            accept="image/*"
                                             onChange={handleGroupAvatarChange}
                                         />
                                     </>
                                 )}
-                                <div 
+                                <div
                                     className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
                                     onClick={handleSearchClick}
                                 >
                                     <span>查找聊天记录</span>
                                 </div>
-                                <div 
+                                <div
                                     className="px-4 py-2 text-sm text-red-600 hover:bg-gray-50 cursor-pointer border-t border-gray-100 mt-1"
                                     onClick={handleDeleteChatClick}
                                 >
@@ -481,10 +491,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                           <div key={msg.id} className="px-4 py-3 bg-white border-b border-gray-100 hover:bg-gray-50 cursor-pointer">
                               <div className="flex items-center justify-between mb-1">
                                   <div className="flex items-center gap-2">
-                                      <img 
-                                        src={msg.senderId === 'me' ? currentUserAvatar : (msg.senderId !== activeContact.id && activeContact.isGroup ? `https://picsum.photos/seed/${msg.senderId}/200` : activeContact.avatar)} 
-                                        alt="avatar" 
-                                        className="w-5 h-5 rounded-full" 
+                                      <img
+                                        src={msg.senderId === 'me' ? currentUserAvatar : (msg.senderId !== activeContact.id && activeContact.isGroup ? `https://picsum.photos/seed/${msg.senderId}/200` : activeContact.avatar)}
+                                        alt="avatar"
+                                        className="w-5 h-5 rounded-full"
                                       />
                                       <span className="text-xs text-gray-500">
                                           {msg.senderId === 'me' ? '我' : (msg.senderName || activeContact.name)}
@@ -519,7 +529,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 </span>
             </div>
             )}
-            
+
             {messages.map((msg) => {
             const isMe = msg.senderId === 'me';
             const isSystem = msg.type === MessageType.SYSTEM;
@@ -541,15 +551,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             return (
                 <div key={msg.id} className={`flex mb-4 ${isMe ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
                 {!isMe && (
-                    <img 
-                    src={msg.senderId !== activeContact.id && activeContact.isGroup ? `https://picsum.photos/seed/${msg.senderId}/200` : activeContact.avatar} 
-                    alt="Sender" 
+                    <img
+                    src={msg.senderId !== activeContact.id && activeContact.isGroup ? `https://picsum.photos/seed/${msg.senderId}/200` : activeContact.avatar}
+                    alt="Sender"
                     className="w-9 h-9 rounded-md mr-2.5 self-start select-none object-cover"
                     />
                 )}
-                
+
                 <div className={`flex flex-col max-w-[70%] ${isMe ? 'items-end' : 'items-start'}`}>
-                    
+
                     {/* Group Chat Sender Name */}
                     {activeContact.isGroup && !isMe && (
                     <span className="text-[10px] text-gray-400 mb-1 ml-1">
@@ -574,13 +584,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                         <div className="flex flex-col">
                             <div className={`relative group`}>
                             {/* Bubble */}
-                            <div 
+                            <div
                                 onContextMenu={(e) => handleContextMenu(e, msg.id)}
                                 onClick={() => isAudio && playAudio(msg.content, msg.id)}
                                 className={`rounded-[4px] text-[14px] leading-relaxed break-words shadow-sm cursor-default overflow-hidden ${
-                                    isAudio 
+                                    isAudio
                                         ? (isMe ? 'bg-[#95ec69] border border-[#8ad961]' : 'bg-white border border-[#ededed]') + ' px-2.5 py-2 flex items-center gap-2 cursor-pointer min-w-[80px]'
-                                    : isImage 
+                                    : isImage
                                         ? 'bg-transparent border-0 shadow-none'
                                     : isFile
                                         ? 'bg-white border border-[#ededed] p-3 flex items-center gap-3 min-w-[200px]'
@@ -629,9 +639,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 </div>
 
                 {isMe && (
-                    <img 
-                    src={currentUserAvatar} 
-                    alt="Me" 
+                    <img
+                    src={currentUserAvatar}
+                    alt="Me"
                     className="w-9 h-9 rounded-md ml-2.5 self-start select-none"
                     />
                 )}
@@ -641,9 +651,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
             {isTyping && (
             <div className="flex mb-4 justify-start animate-fade-in-up">
-                <img 
-                    src={activeContact.avatar} 
-                    alt="Sender" 
+                <img
+                    src={activeContact.avatar}
+                    alt="Sender"
                     className="w-9 h-9 rounded-md mr-2.5 self-start"
                 />
                 <div className="bg-white border border-[#ededed] px-4 py-3 rounded-[4px]">
@@ -661,12 +671,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
       {/* Context Menu */}
       {contextMenu && (
-        <div 
+        <div
           className="fixed z-50 bg-white shadow-xl border border-[#e5e5e5] rounded py-1 w-32 animate-fade-in-up"
           style={{ top: contextMenu.y, left: contextMenu.x }}
-          onClick={(e) => e.stopPropagation()} 
+          onClick={(e) => e.stopPropagation()}
         >
-          <button 
+          <button
             onClick={handleConfirmDelete}
             className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-[#f5f5f5] flex items-center gap-2"
           >
@@ -679,14 +689,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       {/* Input Area - Only show when not searching */}
       {!isSearching && (
         <div className="h-[160px] border-t border-[#e7e7e7] bg-[#f5f5f5] flex flex-col flex-shrink-0 z-10 relative">
-            
+
             {/* Emoji Picker Popup */}
             {showEmojiPicker && (
                 <div id="emoji-container" className="absolute bottom-[165px] left-4 bg-white border border-gray-200 shadow-lg rounded-lg p-4 w-80 h-64 overflow-y-auto custom-scrollbar z-50 animate-fade-in-up">
                     <div className="grid grid-cols-8 gap-2">
                         {EMOJIS.map(emoji => (
-                            <button 
-                                key={emoji} 
+                            <button
+                                key={emoji}
                                 onClick={() => addEmoji(emoji)}
                                 className="text-xl hover:bg-gray-100 p-1 rounded transition-colors"
                             >
@@ -708,8 +718,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     ) : (
                         <div className="grid grid-cols-4 gap-2">
                             {stickers.map(sticker => (
-                                <button 
-                                    key={sticker.id} 
+                                <button
+                                    key={sticker.id}
                                     onClick={() => handleSendSticker(sticker.url)}
                                     className="hover:bg-gray-100 p-2 rounded transition-colors aspect-square flex items-center justify-center"
                                 >
@@ -723,7 +733,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
             {/* Toolbar */}
             <div className="h-10 flex items-center px-4 gap-4 text-[#5a5a5a]">
-            <button 
+            <button
                 className={`hover:text-black transition-colors ${inputMode === 'voice' ? 'text-green-600' : ''}`}
                 onClick={() => setInputMode(inputMode === 'text' ? 'voice' : 'text')}
                 title="语音模式"
@@ -731,7 +741,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 <Mic size={20} strokeWidth={1.5} />
             </button>
 
-            <button 
+            <button
                 id="emoji-btn"
                 onClick={toggleEmojiPicker}
                 className={`hover:text-black transition-colors ${showEmojiPicker ? 'text-green-600' : ''}`}
@@ -740,7 +750,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 <Smile size={20} strokeWidth={1.5} />
             </button>
 
-            <button 
+            <button
                 id="sticker-btn"
                 onClick={toggleStickerPicker}
                 className={`hover:text-black transition-colors ${showStickerPicker ? 'text-green-600' : ''}`}
@@ -748,15 +758,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             >
                 <Heart size={20} strokeWidth={1.5} />
             </button>
-            
+
             {/* File Input Hidden */}
-            <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
+            <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
                 onChange={handleFileChange}
             />
-            
+
             <button onClick={handleFileUploadClick} className="hover:text-black transition-colors" title="发送文件">
                 <FolderOpen size={20} strokeWidth={1.5} />
             </button>
@@ -764,11 +774,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 <Paperclip size={20} strokeWidth={1.5} />
             </button>
             </div>
-            
+
             {/* Input Section */}
             <div className="flex-1 px-4 pb-2 relative">
             {inputMode === 'text' ? (
-                <textarea 
+                <textarea
                 className="w-full h-full bg-transparent resize-none focus:outline-none text-[14px] leading-relaxed custom-scrollbar"
                 placeholder=""
                 value={inputValue}
@@ -785,8 +795,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     onTouchStart={startRecording}
                     onTouchEnd={stopRecording}
                     className={`w-64 py-3 rounded-md font-medium select-none transition-all duration-150 ${
-                    isRecording 
-                        ? 'bg-[#d4d4d4] text-gray-700 shadow-inner scale-95' 
+                    isRecording
+                        ? 'bg-[#d4d4d4] text-gray-700 shadow-inner scale-95'
                         : 'bg-[#ffffff] text-black border border-[#e5e5e5] shadow-sm hover:bg-[#fbfbfb]'
                     }`}
                 >
@@ -802,12 +812,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 {inputMode === 'text' && "松开 Enter 发送"}
             </div>
             {inputMode === 'text' && (
-                <button 
+                <button
                 onClick={handleSendText}
                 disabled={!inputValue.trim() || isTyping}
                 className={`px-6 py-1.5 text-[14px] rounded-[4px] transition-colors ${
-                    inputValue.trim() 
-                    ? 'bg-[#e9e9e9] text-[#07c160] hover:bg-[#d2d2d2]' 
+                    inputValue.trim()
+                    ? 'bg-[#e9e9e9] text-[#07c160] hover:bg-[#d2d2d2]'
                     : 'bg-[#e9e9e9] text-[#b0b0b0] cursor-default'
                 }`}
                 >

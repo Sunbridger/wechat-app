@@ -39,7 +39,7 @@ export const dbService = {
         }
         if (!db.objectStoreNames.contains(STORE_MESSAGES)) {
           // We store messages grouped by contactId
-          db.createObjectStore(STORE_MESSAGES); 
+          db.createObjectStore(STORE_MESSAGES);
         }
         if (!db.objectStoreNames.contains(STORE_MOMENTS)) {
           db.createObjectStore(STORE_MOMENTS, { keyPath: 'id' });
@@ -142,13 +142,13 @@ export const dbService = {
     return this.getAll<Contact>(STORE_CONTACTS);
   },
   async saveContacts(contacts: Contact[]): Promise<void> {
-    // For simplicity, we clear and rewrite or put one by one. 
+    // For simplicity, we clear and rewrite or put one by one.
     // Transaction guarantees consistency.
     return new Promise((resolve, reject) => {
         if (!this.db) return reject("DB not initialized");
         const transaction = this.db.transaction([STORE_CONTACTS], 'readwrite');
         const store = transaction.objectStore(STORE_CONTACTS);
-        
+
         // Careful: contacts might be deleted in app, so we need to sync correctly.
         // Simplest approach for this scale: clear store, add all current contacts.
         store.clear().onsuccess = () => {
@@ -186,17 +186,17 @@ export const dbService = {
           request.onerror = () => reject(request.error);
       });
   },
-  
+
   async saveMessages(messagesMap: Record<string, Message[]>): Promise<void> {
       return new Promise((resolve, reject) => {
         if (!this.db) return reject("DB not initialized");
         const transaction = this.db.transaction([STORE_MESSAGES], 'readwrite');
         const store = transaction.objectStore(STORE_MESSAGES);
-        
+
         // Sync: put each entry
         const entries = Object.entries(messagesMap);
         if (entries.length === 0) resolve();
-        
+
         let processed = 0;
         entries.forEach(([contactId, msgs]) => {
             store.put(msgs, contactId).onsuccess = () => {
@@ -206,7 +206,7 @@ export const dbService = {
         });
       });
   },
-  
+
   async deleteMessagesForContact(contactId: string): Promise<void> {
       return this.delete(STORE_MESSAGES, contactId);
   },

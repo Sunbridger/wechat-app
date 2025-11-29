@@ -14,7 +14,7 @@ import { dbService } from './services/dbService';
 const FALLBACK_USER: User = {
   id: 'me',
   name: '我',
-  avatar: 'https://picsum.photos/id/64/200/200'
+  avatar: 'https://picsum.photos/id/1/200/200'
 };
 
 const INITIAL_CONTACTS: Contact[] = [
@@ -36,7 +36,7 @@ const INITIAL_CONTACTS: Contact[] = [
     isGroup: true,
     hasAiActive: false,
     members: [
-        { id: 'me', name: '我', avatar: 'https://picsum.photos/id/64/200/200' },
+        { id: 'me', name: '我', avatar: 'https://picsum.photos/id/1/200/200' },
         { id: 'user_99', name: '管理员', avatar: 'https://picsum.photos/seed/user_99/200' },
         { id: 'user_88', name: '小李', avatar: 'https://picsum.photos/seed/user_88/200' }
     ]
@@ -94,7 +94,7 @@ const App: React.FC = () => {
   const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>(INITIAL_MESSAGES);
   const [moments, setMoments] = useState<Moment[]>(INITIAL_MOMENTS);
   const [customStickers, setCustomStickers] = useState<Sticker[]>(INITIAL_STICKERS);
-  
+
   const [activeContactId, setActiveContactId] = useState<string>('1');
   const [typingMap, setTypingMap] = useState<Record<string, boolean>>({});
   const [currentTab, setCurrentTab] = useState<TabType>('chat');
@@ -107,10 +107,10 @@ const App: React.FC = () => {
     const initData = async () => {
       try {
         await dbService.init();
-        
+
         // Device Fingerprint Logic
         const deviceId = await dbService.getOrCreateDeviceId();
-        
+
         let user = await dbService.getUser();
         if (!user) {
             // No user exists (first run in this browser context), create unique one based on deviceId
@@ -125,7 +125,7 @@ const App: React.FC = () => {
         setCurrentUser(user);
 
         const savedPeerId = await dbService.getPeerId();
-        
+
         // Initialize P2P with saved ID (if any)
         p2pService.init(savedPeerId || undefined);
         p2pService.setOnIdAssigned((id) => {
@@ -165,7 +165,7 @@ const App: React.FC = () => {
 
   // 2. Persistence Effects - Save to IndexedDB on change
   // We skip saving if DB hasn't loaded yet to avoid overwriting DB with initial state
-  
+
   useEffect(() => {
     if (isDbLoaded) dbService.saveUser(currentUser);
   }, [currentUser, isDbLoaded]);
@@ -188,22 +188,22 @@ const App: React.FC = () => {
 
   // Sort contacts by last message time
   useEffect(() => {
-    setContacts(prev => 
+    setContacts(prev =>
       [...prev].sort((a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0))
     );
   }, [messagesMap]);
 
   const handleIncomingP2PMessage = (payload: P2PMessagePayload) => {
       const { message, senderInfo } = payload;
-      
+
       // Check if contact exists, if not, add them
       setContacts(prev => {
-          const existing = prev.find(c => c.peerId === senderInfo.id || c.name === senderInfo.name); 
+          const existing = prev.find(c => c.peerId === senderInfo.id || c.name === senderInfo.name);
           if (existing) {
               // FIX: Update name and avatar from senderInfo to ensure consistency
               return prev.map(c => c.id === existing.id ? {
-                  ...c, 
-                  name: senderInfo.name, 
+                  ...c,
+                  name: senderInfo.name,
                   avatar: senderInfo.avatar,
                   lastMessage: message.type === MessageType.TEXT ? message.content : `[${message.type}]`,
                   lastMessageTime: Date.now()
@@ -216,7 +216,7 @@ const App: React.FC = () => {
                   name: senderInfo.name || "Unknown",
                   avatar: senderInfo.avatar || 'https://picsum.photos/200',
                   isAi: false,
-                  peerId: senderInfo.id, 
+                  peerId: senderInfo.id,
                   lastMessage: message.type === MessageType.TEXT ? message.content : `[${message.type}]`,
                   lastMessageTime: Date.now()
               };
@@ -228,7 +228,7 @@ const App: React.FC = () => {
         setContacts(currentContacts => {
             const contact = currentContacts.find(c => c.peerId === senderInfo.id || c.name === senderInfo.name);
             const resolvedContactId = contact ? contact.id : `p2p_${senderInfo.id}`;
-            
+
             const incomingMsg: Message = {
                 ...message,
                 senderId: resolvedContactId, // Force sender ID to match contact ID locally
@@ -247,7 +247,7 @@ const App: React.FC = () => {
   const handleSelectContact = (id: string) => {
     setActiveContactId(id);
     if (id !== 'new_friends' && id !== 'group_create') {
-        setCurrentTab('chat'); 
+        setCurrentTab('chat');
     }
   };
 
@@ -259,7 +259,7 @@ const App: React.FC = () => {
   };
 
   const toggleGroupAi = useCallback((contactId: string) => {
-      setContacts(prev => prev.map(c => 
+      setContacts(prev => prev.map(c =>
           c.id === contactId ? { ...c, hasAiActive: !c.hasAiActive } : c
       ));
   }, []);
@@ -305,10 +305,15 @@ const App: React.FC = () => {
   }, [contacts, currentUser]);
 
   const handleAddContact = useCallback((name: string, id?: string) => {
+      console.log('handleAddContact called with:', name, id);
       const isPeerId = id && id.length > 10;
       const newId = isPeerId ? `p2p_${id}` : (id || `user_${Date.now()}`);
-      
+
+      console.log('newId:', newId);
+      console.log('contacts:', contacts);
+
       if (contacts.some(c => c.id === newId)) {
+          console.log('contact already exists, setting activeContactId:', newId);
           setActiveContactId(newId);
           setCurrentTab('chat');
           return;
@@ -321,15 +326,20 @@ const App: React.FC = () => {
           lastMessage: '我们已经是好友了，开始聊天吧',
           lastMessageTime: Date.now(),
           isAi: false,
-          peerId: isPeerId ? id : undefined 
+          peerId: isPeerId ? id : undefined
       };
-      
+
+      console.log('creating new contact:', newContact);
+
       if (isPeerId) {
+          console.log('connecting to peer:', id);
           p2pService.connectToPeer(id!);
       }
 
+      console.log('updating contacts state');
       setContacts(prev => [...prev, newContact]);
-      
+
+      console.log('updating messagesMap state');
       setMessagesMap(prev => ({
           ...prev,
           [newId]: [{
@@ -341,9 +351,10 @@ const App: React.FC = () => {
           }]
       }));
 
+      console.log('setting activeContactId and switching to chat tab');
       setActiveContactId(newId);
       setCurrentTab('chat');
-  }, [contacts]);
+  }, [contacts, setActiveContactId, setCurrentTab, setMessagesMap]);
 
   const handleAddMember = useCallback((contactId: string, name: string) => {
       const newMemberId = `user_${Date.now()}`;
@@ -382,7 +393,7 @@ const App: React.FC = () => {
   }, []);
 
   const handleUpdateContactAvatar = useCallback((contactId: string, newAvatar: string) => {
-      setContacts(prev => prev.map(c => 
+      setContacts(prev => prev.map(c =>
           c.id === contactId ? { ...c, avatar: newAvatar } : c
       ));
   }, []);
@@ -464,7 +475,7 @@ const App: React.FC = () => {
           return newMap;
       });
       setActiveContactId('');
-      
+
       if (isDbLoaded) {
           dbService.deleteMessagesForContact(contactId);
       }
@@ -475,7 +486,7 @@ const App: React.FC = () => {
 
     const currentMessages = messagesMap[activeContactId] || [];
     const updatedMessages = currentMessages.filter(msg => msg.id !== messageId);
-    
+
     setMessagesMap(prev => ({
       ...prev,
       [activeContactId]: updatedMessages
@@ -491,7 +502,7 @@ const App: React.FC = () => {
              else if (lastMsg.type === MessageType.FILE) preview = '[文件]';
              else preview = lastMsg.content;
         }
-        
+
         return {
           ...c,
           lastMessage: preview,
@@ -503,8 +514,8 @@ const App: React.FC = () => {
   }, [activeContactId, messagesMap]);
 
   const handleSendMessage = useCallback(async (
-      content: string, 
-      type: MessageType = MessageType.TEXT, 
+      content: string,
+      type: MessageType = MessageType.TEXT,
       extra: { duration?: number, fileName?: string, fileSize?: string } = {}
   ) => {
     if (!activeContactId || activeContactId === 'new_friends' || activeContactId === 'group_create') return;
@@ -547,14 +558,14 @@ const App: React.FC = () => {
     if (currentContact?.peerId) {
         const p2pMsg = { ...newMessage, senderId: myPeerId };
         p2pService.sendMessage(currentContact.peerId, p2pMsg, { ...currentUser, id: myPeerId });
-        
+
         setTimeout(() => {
             setMessagesMap(prev => ({
                 ...prev,
                 [activeContactId]: prev[activeContactId].map(m => m.id === newMessageId ? { ...m, status: 'sent' } : m)
             }));
         }, 500);
-        return; 
+        return;
     }
 
 
@@ -577,7 +588,7 @@ const App: React.FC = () => {
         const currentMessages = prev[activeContactId] || [];
         return {
           ...prev,
-          [activeContactId]: currentMessages.map(msg => 
+          [activeContactId]: currentMessages.map(msg =>
             msg.id === newMessageId ? { ...msg, status: 'sent' } : msg
           )
         };
@@ -597,7 +608,7 @@ const App: React.FC = () => {
 
         setMessagesMap(prev => {
             const currentMessages = prev[activeContactId] || [];
-            const updatedMessages = currentMessages.map(msg => 
+            const updatedMessages = currentMessages.map(msg =>
                 msg.id === newMessageId ? { ...msg, status: 'read' as const } : msg
             );
 
@@ -645,7 +656,7 @@ const App: React.FC = () => {
       mainContent = (
         <div className="flex flex-col w-full h-full relative">
              <div className="md:hidden absolute top-4 left-4 z-50">
-               <button onClick={() => handleTabChange('chat')} className="bg-gray-200 p-2 rounded-full text-gray-600">← 返回</button>
+               <button onClick={() => handleTabChange('chat')} className="text-gray-600 hover:text-black p-2">←</button>
             </div>
             <Moments currentUser={currentUser} moments={moments} onAddMoment={handleAddMoment} onAddComment={handleAddComment} onLikeMoment={handleLikeMoment}/>
         </div>
@@ -658,11 +669,21 @@ const App: React.FC = () => {
       mainContent = <GroupCreator contacts={contacts} currentUser={currentUser} onCreateGroup={handleCreateGroup} onCancel={() => { setActiveContactId(''); setCurrentTab('chat'); }}/>;
   } else if (activeContact) {
       mainContent = (
-        <div className="flex flex-col w-full h-full relative">
-          <div className="md:hidden absolute top-4 left-4 z-50">
-             <button onClick={() => setActiveContactId('')} className="bg-gray-200 p-2 rounded-full text-gray-600">← 返回</button>
-          </div>
-          <ChatWindow activeContact={activeContact} messages={currentMessages} currentUserAvatar={currentUser.avatar} onSendMessage={handleSendMessage} onDeleteMessage={handleDeleteMessage} onToggleGroupAi={toggleGroupAi} onAddMember={handleAddMember} onUpdateContactAvatar={handleUpdateContactAvatar} onDeleteChat={handleDeleteChat} isTyping={isTyping} stickers={customStickers}/>
+        <div className="flex flex-col w-full h-full">
+          <ChatWindow
+            activeContact={activeContact}
+            messages={currentMessages}
+            currentUserAvatar={currentUser.avatar}
+            onSendMessage={handleSendMessage}
+            onDeleteMessage={handleDeleteMessage}
+            onToggleGroupAi={toggleGroupAi}
+            onAddMember={handleAddMember}
+            onUpdateContactAvatar={handleUpdateContactAvatar}
+            onDeleteChat={handleDeleteChat}
+            isTyping={isTyping}
+            stickers={customStickers}
+            onBack={() => setActiveContactId('')}
+          />
         </div>
       );
   } else {
