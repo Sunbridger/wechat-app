@@ -10,8 +10,9 @@ const STORE_MESSAGES = 'messages'; // key: contactId, value: Message[]
 const STORE_MOMENTS = 'moments';
 const STORE_STICKERS = 'stickers';
 
-export const dbService = {
-  db: null as IDBDatabase | null,
+// Use a class instead of object literal to properly handle generic method typing
+class DBService {
+  private db: IDBDatabase | null = null;
 
   async init(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -49,7 +50,7 @@ export const dbService = {
         }
       };
     });
-  },
+  }
 
   // --- Generic Helpers ---
 
@@ -59,10 +60,10 @@ export const dbService = {
       const transaction = this.db.transaction([storeName], 'readonly');
       const store = transaction.objectStore(storeName);
       const request = store.get(key);
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => resolve(request.result as T | undefined);
       request.onerror = () => reject(request.error);
     });
-  },
+  }
 
   async getAll<T>(storeName: string): Promise<T[]> {
     return new Promise((resolve, reject) => {
@@ -70,10 +71,10 @@ export const dbService = {
       const transaction = this.db.transaction([storeName], 'readonly');
       const store = transaction.objectStore(storeName);
       const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => resolve(request.result as T[]);
       request.onerror = () => reject(request.error);
     });
-  },
+  }
 
   async put(storeName: string, value: any, key?: string): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -84,7 +85,7 @@ export const dbService = {
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
-  },
+  }
 
   async clear(storeName: string): Promise<void> {
       return new Promise((resolve, reject) => {
@@ -95,7 +96,7 @@ export const dbService = {
           request.onsuccess = () => resolve();
           request.onerror = () => reject(request.error);
       });
-  },
+  }
 
   async delete(storeName: string, key: string): Promise<void> {
       return new Promise((resolve, reject) => {
@@ -106,7 +107,7 @@ export const dbService = {
           request.onsuccess = () => resolve();
           request.onerror = () => reject(request.error);
       });
-  },
+  }
 
   // --- Specific Data Handlers ---
 
@@ -119,28 +120,28 @@ export const dbService = {
       const newId = crypto.randomUUID ? crypto.randomUUID() : `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       await this.put(STORE_SYSTEM, newId, 'deviceId');
       return newId;
-  },
+  }
 
   // User
   async getUser(): Promise<User | undefined> {
     return this.get<User>(STORE_SYSTEM, 'currentUser');
-  },
+  }
   async saveUser(user: User): Promise<void> {
     return this.put(STORE_SYSTEM, user, 'currentUser');
-  },
+  }
 
   // Peer ID
   async getPeerId(): Promise<string | undefined> {
       return this.get<string>(STORE_SYSTEM, 'peerId');
-  },
+  }
   async savePeerId(id: string): Promise<void> {
       return this.put(STORE_SYSTEM, id, 'peerId');
-  },
+  }
 
   // Contacts
   async getContacts(): Promise<Contact[]> {
     return this.getAll<Contact>(STORE_CONTACTS);
-  },
+  }
   async saveContacts(contacts: Contact[]): Promise<void> {
     // For simplicity, we clear and rewrite or put one by one.
     // Transaction guarantees consistency.
@@ -162,7 +163,7 @@ export const dbService = {
              });
         };
     });
-  },
+  }
 
   // Messages
   // Stored as Key: contactId, Value: Message[]
@@ -185,7 +186,7 @@ export const dbService = {
           };
           request.onerror = () => reject(request.error);
       });
-  },
+  }
 
   async saveMessages(messagesMap: Record<string, Message[]>): Promise<void> {
       return new Promise((resolve, reject) => {
@@ -205,16 +206,16 @@ export const dbService = {
             }
         });
       });
-  },
+  }
 
   async deleteMessagesForContact(contactId: string): Promise<void> {
       return this.delete(STORE_MESSAGES, contactId);
-  },
+  }
 
   // Moments
   async getMoments(): Promise<Moment[]> {
       return this.getAll<Moment>(STORE_MOMENTS);
-  },
+  }
   async saveMoments(moments: Moment[]): Promise<void> {
      return new Promise((resolve, reject) => {
         if (!this.db) return reject("DB not initialized");
@@ -231,12 +232,12 @@ export const dbService = {
              });
         };
     });
-  },
+  }
 
   // Stickers
   async getStickers(): Promise<Sticker[]> {
       return this.getAll<Sticker>(STORE_STICKERS);
-  },
+  }
   async saveStickers(stickers: Sticker[]): Promise<void> {
      return new Promise((resolve, reject) => {
         if (!this.db) return reject("DB not initialized");
@@ -254,4 +255,7 @@ export const dbService = {
         };
     });
   }
-};
+}
+
+// Create and export a singleton instance
+export const dbService = new DBService();
