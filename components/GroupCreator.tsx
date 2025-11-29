@@ -49,7 +49,9 @@ const GroupCreator: React.FC<GroupCreatorProps> = ({ contacts, currentUser, onCr
     <div className="flex flex-col h-full w-full bg-[#f5f5f5]">
       {/* Header */}
       <div className="h-16 border-b border-[#e7e7e7] flex justify-between items-center px-6 bg-[#f5f5f5] flex-shrink-0">
-        <button onClick={onCancel} className="text-black text-[15px]">取消</button>
+        <button onClick={onCancel} className="text-gray-600 hover:text-black p-2">
+          ←
+        </button>
         <span className="font-medium text-[16px] text-black">发起群聊</span>
         <button 
           onClick={handleCreate}

@@ -3,9 +3,10 @@ import { Search, UserPlus, Loader2 } from 'lucide-react';
 
 interface NewFriendsProps {
   onAddContact: (name: string, id?: string) => void;
+  onBack: () => void;
 }
 
-const NewFriends: React.FC<NewFriendsProps> = ({ onAddContact }) => {
+const NewFriends: React.FC<NewFriendsProps> = ({ onAddContact, onBack }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResult, setSearchResult] = useState<{name: string, id: string, avatar: string} | null>(null);
@@ -52,8 +53,12 @@ const NewFriends: React.FC<NewFriendsProps> = ({ onAddContact }) => {
 
   return (
     <div className="flex flex-col h-full w-full bg-[#f5f5f5]">
-      <div className="h-16 border-b border-[#e7e7e7] flex items-center px-6 bg-[#f5f5f5]">
+      <div className="h-16 border-b border-[#e7e7e7] flex justify-between items-center px-6 bg-[#f5f5f5]">
+        <button onClick={onBack} className="text-gray-600 hover:text-black p-2">
+          ←
+        </button>
         <span className="font-medium text-[16px] text-black">新的朋友</span>
+        <div className="w-6"></div>
       </div>
 
       <div className="p-8 max-w-2xl mx-auto w-full">
