@@ -1,10 +1,29 @@
 import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
 import { Message, MessageType } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 // System instruction to make the AI behave like a casual chat friend in Chinese
 const SYSTEM_INSTRUCTION = "你是一个在聊天软件中的乐于助人、随和且友好的助手。你的回复应该简洁自然，像日常发短信一样。偶尔使用表情符号。请全程使用简体中文与用户交流。";
+
+// Create a mock AI response for when API key is not available
+const getMockReply = (allMessages: Message[], contactName: string): string => {
+  const lastMessage = allMessages[allMessages.length - 1];
+  const messageContent = lastMessage.content.toLowerCase();
+  
+  // Simple mock responses based on keywords
+  if (messageContent.includes('你好') || messageContent.includes('hi') || messageContent.includes('hello')) {
+    return `你好！我是${contactName}。很高兴和你聊天！`;
+  }
+  if (messageContent.includes('天气')) {
+    return '今天天气看起来不错呢！';
+  }
+  if (messageContent.includes('吃饭') || messageContent.includes('吃什么')) {
+    return '我也不知道吃什么，不如试试附近的餐厅？';
+  }
+  if (messageContent.includes('再见') || messageContent.includes('拜拜')) {
+    return '再见！下次再聊！';
+  }
+  return `我是${contactName}，你刚才说：${lastMessage.content}`;
+};
 
 /**
  * Sends a message to Gemini and gets a response, maintaining a simple context.
@@ -17,6 +36,15 @@ export const getGeminiReply = async (
 ): Promise<string> => {
   try {
     if (allMessages.length === 0) return "Could not process empty message history.";
+    
+    // Check if API key is available
+    if (!process.env.API_KEY) {
+      // Return mock response if no API key
+      return getMockReply(allMessages, contactName);
+    }
+    
+    // Initialize GoogleGenAI only if API key is available
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     // Separate the latest message (trigger) from the history
     const historyMessages = allMessages.slice(0, -1);
@@ -111,7 +139,8 @@ export const getGeminiReply = async (
     return response.text || "抱歉，我没想好怎么回。";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "我现在连接网络有点问题。";
+    // Return mock response if any error occurs
+    return getMockReply(allMessages, contactName);
   }
 };
 
@@ -120,6 +149,15 @@ export const getGeminiReply = async (
  */
 export const transcribeAudio = async (base64Audio: string): Promise<string> => {
   try {
+    // Check if API key is available
+    if (!process.env.API_KEY) {
+      // Return empty string if no API key
+      return "[语音消息]";
+    }
+    
+    // Initialize GoogleGenAI only if API key is available
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
     const base64Data = base64Audio.split(',')[1];
     let mimeType = 'audio/webm';
     const mimeMatch = base64Audio.match(/data:([^;]+);/);
@@ -138,6 +176,6 @@ export const transcribeAudio = async (base64Audio: string): Promise<string> => {
     return response.text || "";
   } catch (error) {
     console.error("Transcription Error:", error);
-    return "";
+    return "[语音消息]";
   }
 };
