@@ -48,6 +48,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
 
   // Search State
@@ -58,6 +59,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const startTimeRef = useRef<number>(0);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const groupAvatarInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -147,6 +149,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   };
 
   // Audio Recording Logic
+  // 格式化录音时长（秒 -> mm:ss）
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -154,6 +163,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
       startTimeRef.current = Date.now();
+      setRecordingDuration(0);
+
+      // 启动录音计时器
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(Math.round((Date.now() - startTimeRef.current) / 1000));
+      }, 1000);
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -190,8 +205,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
+      // 清除计时器
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      setRecordingDuration(0);
     }
   };
 
@@ -794,13 +816,22 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     onMouseLeave={stopRecording}
                     onTouchStart={startRecording}
                     onTouchEnd={stopRecording}
-                    className={`w-64 py-3 rounded-md font-medium select-none transition-all duration-150 ${
-                    isRecording
-                        ? 'bg-[#d4d4d4] text-gray-700 shadow-inner scale-95'
-                        : 'bg-[#ffffff] text-black border border-[#e5e5e5] shadow-sm hover:bg-[#fbfbfb]'
-                    }`}
+                    className={`w-40 h-10 flex items-center justify-center rounded-full font-medium transition-all duration-200 ${isRecording ? 'bg-red-600 text-white shadow-md' : 'bg-green-500 text-white hover:bg-green-600'}`}
                 >
-                    {isRecording ? "松开 发送" : "按住 说话"}
+                    <div className="flex items-center">
+                        {/* 录音状态下显示音频波形 */}
+                        {isRecording && (
+                            <div className="mr-2 flex items-end justify-center space-x-0.5 h-5">
+                                <div className="w-1 bg-white animate-sound-wave-1 rounded-full"></div>
+                                <div className="w-1 bg-white animate-sound-wave-2 rounded-full"></div>
+                                <div className="w-1 bg-white animate-sound-wave-3 rounded-full"></div>
+                                <div className="w-1 bg-white animate-sound-wave-4 rounded-full"></div>
+                                <div className="w-1 bg-white animate-sound-wave-5 rounded-full"></div>
+                            </div>
+                        )}
+                        <Mic size={16} className={`mr-2 transition-opacity duration-200 ${isRecording ? 'opacity-0' : ''}`} />
+                        <span>{isRecording ? "录音中" : "按住说话"}</span>
+                    </div>
                 </button>
                 </div>
             )}
@@ -831,4 +862,61 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   );
 };
 
+// 添加音频波形动画样式
+if (typeof document !== 'undefined') {
+    // 确保只添加一次样式
+    if (!document.getElementById('sound-wave-animation')) {
+        const style = document.createElement('style');
+        style.id = 'sound-wave-animation';
+        style.textContent = `
+            @keyframes sound-wave-1 {
+                0%, 100% { height: 0.5rem; }
+                50% { height: 1.25rem; }
+            }
+
+            @keyframes sound-wave-2 {
+                0%, 100% { height: 1rem; }
+                50% { height: 0.5rem; }
+            }
+
+            @keyframes sound-wave-3 {
+                0%, 100% { height: 0.25rem; }
+                50% { height: 1.5rem; }
+            }
+
+            @keyframes sound-wave-4 {
+                0%, 100% { height: 1.25rem; }
+                50% { height: 0.75rem; }
+            }
+
+            @keyframes sound-wave-5 {
+                0%, 100% { height: 0.75rem; }
+                50% { height: 1rem; }
+            }
+
+            .animate-sound-wave-1 {
+                animation: sound-wave-1 1s infinite ease-in-out;
+            }
+
+            .animate-sound-wave-2 {
+                animation: sound-wave-2 1.2s infinite ease-in-out;
+            }
+
+            .animate-sound-wave-3 {
+                animation: sound-wave-3 0.9s infinite ease-in-out;
+            }
+
+            .animate-sound-wave-4 {
+                animation: sound-wave-4 1.1s infinite ease-in-out;
+            }
+
+            .animate-sound-wave-5 {
+                animation: sound-wave-5 0.8s infinite ease-in-out;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+}
+
+// 导出组件
 export default ChatWindow;

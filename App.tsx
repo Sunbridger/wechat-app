@@ -121,7 +121,7 @@ const App: React.FC = () => {
     setMessagesMap(prev => ({ ...prev, [newContactId]: [] }));
   };
 
-  const handleSendMessage = async (content: string, type: MessageType) => {
+  const handleSendMessage = async (content: string, type: MessageType, options?: { duration?: number; fileName?: string; fileSize?: string }) => {
     if (!activeContactId) return;
 
     // Create and add user message
@@ -132,7 +132,8 @@ const App: React.FC = () => {
       senderId: 'me',
       timestamp: Date.now(),
       type,
-      status: 'sending'
+      status: 'sending',
+      audioDuration: options?.duration
     };
 
     setMessagesMap(prev => ({
