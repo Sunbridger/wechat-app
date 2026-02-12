@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, Users, Folder, Search, Plus, UserPlus, Users as UsersIcon, Tag, Aperture, Smile, Upload, Copy } from 'lucide-react';
 import { Contact, User } from '../types';
+import { P2PStatus } from '../services/p2pService';
 
 export type TabType = 'chat' | 'contacts' | 'moments' | 'files' | 'stickers';
 
@@ -10,17 +11,28 @@ interface SidebarProps {
   onSelectContact: (id: string) => void;
   currentTab: TabType;
   onTabChange: (tab: TabType) => void;
-  onAddContact?: (name: string) => void; 
+  onAddContact?: (name: string, peerId?: string, avatar?: string) => void;
   onStartGroupChat?: () => void;
   hasNewMoments?: boolean;
   currentUser?: User;
   onUpdateUserAvatar?: (url: string) => void;
-  myPeerId?: string; // New prop
+  myPeerId?: string;
+  p2pStatus?: P2PStatus;
+  onLogout?: () => void;
+  pendingFriendRequestsCount?: number;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ 
-  contacts, 
-  activeContactId, 
+const statusLabel: Record<P2PStatus, string> = {
+  disconnected: '未连接',
+  connecting: '连接中',
+  connected: '已连接',
+  error: '异常',
+  retrying: '重试中'
+};
+
+const Sidebar: React.FC<SidebarProps> = ({
+  contacts,
+  activeContactId,
   onSelectContact,
   currentTab,
   onTabChange,
@@ -28,7 +40,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   hasNewMoments,
   currentUser,
   onUpdateUserAvatar,
-  myPeerId
+  myPeerId,
+  p2pStatus,
+  onLogout,
+  pendingFriendRequestsCount = 0
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -37,13 +52,13 @@ const Sidebar: React.FC<SidebarProps> = ({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const copyButtonRef = useRef<HTMLButtonElement>(null);
-  
+
   const formatTime = (timestamp?: number) => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
     const now = new Date();
     const isToday = date.toDateString() === now.toDateString();
-    
+
     if (isToday) {
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     } else {
@@ -99,9 +114,11 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const copyPeerId = () => {
-      if (myPeerId) {
-          navigator.clipboard.writeText(myPeerId);
-          alert("微信号 (ID) 已复制");
+      // 复制用户名而不是Peer ID，因为搜索时使用用户名
+      const textToCopy = currentUser?.name || myPeerId || '';
+      if (textToCopy) {
+          navigator.clipboard.writeText(textToCopy);
+          alert(`用户名 "${textToCopy}" 已复制，可以分享给好友用于搜索添加`);
       }
   };
 
@@ -109,8 +126,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     const term = searchTerm.toLowerCase();
 
     if (currentTab === 'chat') {
-      const filteredContacts = contacts.filter(c => 
-          c.name.toLowerCase().includes(term) || 
+      const filteredContacts = contacts.filter(c =>
+          c.name.toLowerCase().includes(term) ||
           (c.lastMessage && c.lastMessage.toLowerCase().includes(term))
       ).sort((a,b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0));
 
@@ -120,16 +137,16 @@ const Sidebar: React.FC<SidebarProps> = ({
              <div className="text-center text-gray-400 text-xs mt-4">无搜索结果</div>
           )}
           {filteredContacts.map((contact) => (
-            <div 
+            <div
               key={contact.id}
               onClick={() => onSelectContact(contact.id)}
               className={`flex items-center p-3 cursor-pointer transition-colors relative overflow-hidden ${
                 activeContactId === contact.id ? 'bg-[#c6c6c6]' : 'hover:bg-[#dcdcdc]'
               }`}
             >
-              <img 
-                src={contact.avatar} 
-                alt={contact.name} 
+              <img
+                src={contact.avatar}
+                alt={contact.name}
                 className="w-10 h-10 rounded-md object-cover flex-shrink-0"
               />
               <div className="ml-3 flex-1 min-w-0 pr-1">
@@ -154,15 +171,25 @@ const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 overflow-y-auto custom-scrollbar">
             {!searchTerm && (
                 <div className="mt-2 mb-2">
-                    <div 
+                    <div
                         onClick={handleNewFriendsClick}
                         className={`flex items-center px-3 py-2.5 cursor-pointer transition-colors ${activeContactId === 'new_friends' ? 'bg-[#c6c6c6]' : 'hover:bg-[#dcdcdc]'}`}
                     >
-                        <div className="w-9 h-9 rounded-md bg-[#fa9d3b] flex items-center justify-center text-white">
+                        <div className="w-9 h-9 rounded-md bg-[#fa9d3b] flex items-center justify-center text-white relative">
                             <UserPlus size={20} fill="white" />
+                            {pendingFriendRequestsCount > 0 && (
+                                <div className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-[#fa5151] rounded-full flex items-center justify-center text-white text-[10px] font-medium px-1">
+                                    {pendingFriendRequestsCount > 99 ? '99+' : pendingFriendRequestsCount}
+                                </div>
+                            )}
                         </div>
                         <div className="ml-3 flex-1 min-w-0 border-b border-[#e7e7e7] pb-2.5 flex items-center">
                             <h3 className="text-[14px] font-normal text-black">新的朋友</h3>
+                            {pendingFriendRequestsCount > 0 && (
+                                <div className="ml-2 min-w-[18px] h-[18px] bg-[#fa5151] rounded-full flex items-center justify-center text-white text-[10px] font-medium px-1">
+                                    {pendingFriendRequestsCount > 99 ? '99+' : pendingFriendRequestsCount}
+                                </div>
+                            )}
                         </div>
                     </div>
                     <div className="flex items-center px-3 py-2.5 cursor-pointer hover:bg-[#dcdcdc]">
@@ -186,16 +213,16 @@ const Sidebar: React.FC<SidebarProps> = ({
 
             {!searchTerm && <div className="px-4 py-1 text-xs text-gray-400 bg-[#f7f7f7]">常用联系人</div>}
              {sortedContacts.map((contact) => (
-            <div 
+            <div
               key={contact.id}
-              onClick={() => onSelectContact(contact.id)} 
+              onClick={() => onSelectContact(contact.id)}
               className={`flex items-center px-3 py-2.5 cursor-pointer border-b border-[#e7e7e7] transition-colors ${
                 activeContactId === contact.id ? 'bg-[#c6c6c6]' : 'hover:bg-[#dcdcdc]'
               }`}
             >
-              <img 
-                src={contact.avatar} 
-                alt={contact.name} 
+              <img
+                src={contact.avatar}
+                alt={contact.name}
                 className="w-9 h-9 rounded-md object-cover"
               />
               <div className="ml-3 flex-1 min-w-0">
@@ -253,26 +280,33 @@ const Sidebar: React.FC<SidebarProps> = ({
       {/* Narrow Icon Bar (Dark) */}
       <div className="w-[60px] bg-[#2e2e2e] flex flex-col items-center py-4 flex-shrink-0 text-[#969696]">
         <div className="relative group cursor-pointer" onClick={() => avatarInputRef.current?.click()} title="点击修改头像">
-             <img 
-                src={currentUser?.avatar || "https://picsum.photos/id/1/200/200"} 
-                alt="我" 
+             <img
+                src={currentUser?.avatar || "https://picsum.photos/id/1/200/200"}
+                alt="我"
                 className="w-9 h-9 rounded-md mb-6 border border-[#4a4a4a] object-cover group-hover:opacity-80 transition-opacity"
              />
              <div className="absolute inset-0 bg-black/30 rounded-md opacity-0 group-hover:opacity-100 flex items-center justify-center mb-6">
                  <Upload size={12} className="text-white"/>
              </div>
         </div>
-        <input 
-            type="file" 
-            ref={avatarInputRef} 
-            className="hidden" 
+        <input
+            type="file"
+            ref={avatarInputRef}
+            className="hidden"
             accept="image/*"
             onChange={handleAvatarChange}
         />
 
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-6 flex-1">
           <button onClick={() => onTabChange('chat')} className={`transition-colors ${currentTab === 'chat' ? 'text-[#07c160]' : 'hover:text-white'}`} title="聊天"><MessageCircle size={24} strokeWidth={1.5} fill={currentTab === 'chat' ? '#07c160' : 'none'} className={currentTab === 'chat' ? 'text-transparent' : ''} /></button>
-          <button onClick={() => onTabChange('contacts')} className={`transition-colors ${currentTab === 'contacts' ? 'text-[#07c160]' : 'hover:text-white'}`} title="通讯录"><Users size={24} strokeWidth={1.5} fill={currentTab === 'contacts' ? '#07c160' : 'none'} className={currentTab === 'contacts' ? 'text-transparent' : ''} /></button>
+          <div className="relative">
+            <button onClick={() => onTabChange('contacts')} className={`transition-colors ${currentTab === 'contacts' ? 'text-[#07c160]' : 'hover:text-white'}`} title="通讯录"><Users size={24} strokeWidth={1.5} fill={currentTab === 'contacts' ? '#07c160' : 'none'} className={currentTab === 'contacts' ? 'text-transparent' : ''} /></button>
+            {pendingFriendRequestsCount > 0 && currentTab !== 'contacts' && (
+              <div className="absolute -top-1 -right-1 min-w-[16px] h-[16px] bg-[#fa5151] rounded-full flex items-center justify-center text-white text-[9px] font-medium px-0.5 border-2 border-[#2e2e2e]">
+                {pendingFriendRequestsCount > 99 ? '99+' : pendingFriendRequestsCount}
+              </div>
+            )}
+          </div>
           <div className="relative">
             <button onClick={() => onTabChange('moments')} className={`transition-colors ${currentTab === 'moments' ? 'text-[#07c160]' : 'hover:text-white'}`} title="朋友圈"><Aperture size={24} strokeWidth={1.5} className={currentTab === 'moments' ? 'text-[#07c160]' : ''} /></button>
             {hasNewMoments && currentTab !== 'moments' && (<div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#fa5151] rounded-full border-2 border-[#2e2e2e]"></div>)}
@@ -280,6 +314,14 @@ const Sidebar: React.FC<SidebarProps> = ({
           <button onClick={() => onTabChange('stickers')} className={`transition-colors ${currentTab === 'stickers' ? 'text-[#07c160]' : 'hover:text-white'}`} title="自定义表情"><Smile size={24} strokeWidth={1.5} className={currentTab === 'stickers' ? 'text-[#07c160]' : ''} /></button>
           <button onClick={() => onTabChange('files')} className={`transition-colors ${currentTab === 'files' ? 'text-[#07c160]' : 'hover:text-white'}`} title="文件"><Folder size={24} strokeWidth={1.5} fill={currentTab === 'files' ? '#07c160' : 'none'} className={currentTab === 'files' ? 'text-transparent' : ''} /></button>
         </div>
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="mt-6 text-[11px] text-gray-500 hover:text-white transition-colors"
+          >
+            退出
+          </button>
+        )}
       </div>
 
       {/* List Area */}
@@ -290,9 +332,9 @@ const Sidebar: React.FC<SidebarProps> = ({
             <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
               <Search size={14} className="text-gray-400" />
             </div>
-            <input 
-              type="text" 
-              placeholder="搜索" 
+            <input
+              type="text"
+              placeholder="搜索"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-[#e2e2e2] text-xs py-1.5 pl-8 pr-2 rounded-[4px] focus:outline-none border border-transparent focus:border-[#d1d1d1] text-gray-700 placeholder-gray-500"
@@ -305,14 +347,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </button>
             )}
           </div>
-          <button 
+          <button
             ref={buttonRef}
             onClick={() => setMenuOpen(!menuOpen)}
             className={`p-1.5 rounded-[4px] hover:bg-[#d1d1d1] ${menuOpen ? 'bg-[#d1d1d1] text-black' : 'bg-[#e2e2e2] text-gray-600'}`}
           >
             <Plus size={14} />
           </button>
-          
+
           {/* Header Dropdown */}
           {menuOpen && (
             <div ref={menuRef} className="absolute top-14 right-2 w-32 bg-[#2e2e2e] rounded-md shadow-lg py-1 z-50 animate-fade-in-up">
@@ -331,20 +373,27 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* My ID Display (Only in Contacts tab) */}
         {currentTab === 'contacts' && myPeerId && (
             <div className="px-3 py-2 bg-[#f0f0f0] text-xs text-gray-500 flex justify-between items-center border-b border-gray-200 relative">
-                <span className="truncate">我的微信号: {myPeerId}</span>
+                <div className="flex flex-col">
+                    <span className="truncate">我的用户名: {currentUser?.name || '未知'}</span>
+                    <span className="text-[10px] text-gray-400">P2P状态：{statusLabel[p2pStatus || 'disconnected']}</span>
+                    {p2pStatus === 'error' && (
+                        <span className="text-[10px] text-red-500 mt-1">连接失败，请刷新页面重试</span>
+                    )}
+                </div>
                 <div className="relative">
-                    <button 
+                    <button
                         ref={copyButtonRef}
-                        onClick={copyPeerId} 
+                        onClick={copyPeerId}
                         className="text-[#576b95] hover:text-[#07c160] p-1"
                         onMouseEnter={() => setShowCopyTooltip(true)}
                         onMouseLeave={() => setShowCopyTooltip(false)}
+                        title="复制用户名（用于搜索添加好友）"
                     >
                         <Copy size={12} />
                     </button>
                     {showCopyTooltip && (
                         <div className="absolute right-0 -top-8 bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-md whitespace-nowrap">
-                            复制微信号
+                            复制用户名
                         </div>
                     )}
                 </div>

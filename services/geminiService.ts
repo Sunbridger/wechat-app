@@ -37,7 +37,8 @@ const ai = new GoogleGenAI({ apiKey: API_KEY });
 export const getGeminiReply = async (
   allMessages: Message[],
   contactName: string,
-  isGroup: boolean = false
+  isGroup: boolean = false,
+  localUserId: string = 'me'
 ): Promise<string> => {
   try {
     if (allMessages.length === 0)
@@ -74,14 +75,15 @@ export const getGeminiReply = async (
     // Construct history ensuring correct roles and turn-taking
     const formattedHistory: { role: string; parts: any[] }[] = [];
 
+    const isLocalSender = (senderId: string) => senderId === localUserId || senderId === 'me';
+
     for (const msg of historyMessages) {
       let role = 'user';
 
       if (isGroup) {
         // In group chat:
         // - 'gemini_ai' is the model
-        // - 'me' is a user
-        // - other IDs are also users (other humans)
+        // - 本地用户和其他成员都是 user
         if (msg.senderId === 'gemini_ai') {
           role = 'model';
         } else {
@@ -89,9 +91,9 @@ export const getGeminiReply = async (
         }
       } else {
         // In private chat:
-        // - 'me' is user
-        // - the contact (senderId) is the model
-        role = msg.senderId === 'me' ? 'user' : 'model';
+        // - 本地用户是 user
+        // - 联系人（senderId）是 model
+        role = isLocalSender(msg.senderId) ? 'user' : 'model';
       }
 
       let part = formatContentPart(msg);
@@ -101,7 +103,7 @@ export const getGeminiReply = async (
         isGroup &&
         role === 'user' &&
         'text' in part &&
-        msg.senderId !== 'me'
+        !isLocalSender(msg.senderId)
       ) {
         const name = msg.senderName || 'Group Member';
         part = { text: `${name}: ${(part as any).text}` };
@@ -132,7 +134,7 @@ export const getGeminiReply = async (
     let newMessagePart = formatContentPart(lastMessage);
 
     // Add sender name context for the last message if it's a group and not me
-    if (isGroup && lastMessage.senderId !== 'me' && 'text' in newMessagePart) {
+    if (isGroup && !isLocalSender(lastMessage.senderId) && 'text' in newMessagePart) {
       const name = lastMessage.senderName || 'Group Member';
       newMessagePart = { text: `${name}: ${(newMessagePart as any).text}` };
     }

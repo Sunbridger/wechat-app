@@ -6,6 +6,7 @@ interface ChatWindowProps {
   activeContact: Contact;
   messages: Message[];
   currentUserAvatar: string;
+  currentUserId: string;
   onSendMessage: (content: string, type: MessageType, extra?: { duration?: number, fileName?: string, fileSize?: string }) => void;
   onDeleteMessage: (messageId: string) => void;
   onToggleGroupAi?: (contactId: string) => void;
@@ -31,6 +32,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   activeContact,
   messages,
   currentUserAvatar,
+  currentUserId,
   onSendMessage,
   onDeleteMessage,
   onToggleGroupAi,
@@ -514,12 +516,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                               <div className="flex items-center justify-between mb-1">
                                   <div className="flex items-center gap-2">
                                       <img
-                                        src={msg.senderId === 'me' ? currentUserAvatar : (msg.senderId !== activeContact.id && activeContact.isGroup ? `https://picsum.photos/seed/${msg.senderId}/200` : activeContact.avatar)}
+                                        src={msg.senderId === currentUserId ? currentUserAvatar : (msg.senderId !== activeContact.id && activeContact.isGroup ? `https://picsum.photos/seed/${msg.senderId}/200` : activeContact.avatar)}
                                         alt="avatar"
                                         className="w-5 h-5 rounded-full"
                                       />
                                       <span className="text-xs text-gray-500">
-                                          {msg.senderId === 'me' ? '我' : (msg.senderName || activeContact.name)}
+                                          {msg.senderId === currentUserId ? '我' : (msg.senderName || activeContact.name)}
                                       </span>
                                   </div>
                                   <span className="text-xs text-gray-400">
@@ -553,7 +555,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             )}
 
             {messages.map((msg) => {
-            const isMe = msg.senderId === 'me';
+            const isMe = msg.senderId === currentUserId;
             const isSystem = msg.type === MessageType.SYSTEM;
             const isAudio = msg.type === MessageType.AUDIO;
             const isImage = msg.type === MessageType.IMAGE;

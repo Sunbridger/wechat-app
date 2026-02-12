@@ -12,7 +12,7 @@ export enum MessageType {
 export interface Message {
   id: string;
   content: string; // Text content or Base64 data URI
-  senderId: string; // 'me' or contactId
+  senderId: string; // 当前用户 ID 或联系人/群成员 ID
   senderName?: string; // For group chats
   timestamp: number;
   type: MessageType;
@@ -40,6 +40,7 @@ export interface User {
   id: string;
   name: string;
   avatar: string;
+  peerId?: string;
 }
 
 export interface Comment {
@@ -63,4 +64,15 @@ export interface Sticker {
   id: string;
   url: string; // Base64 or URL
   timestamp: number;
+}
+
+export type FriendRequestStatus = 'pending' | 'accepted' | 'rejected';
+
+export interface FriendRequest {
+  id: string;
+  fromUser: User;
+  toUser: User;
+  message?: string;
+  timestamp: number;
+  status: FriendRequestStatus;
 }
